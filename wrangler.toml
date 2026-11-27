@@ -7,3 +7,8 @@ binding = "DB"
 database_name = "appclase"
 database_id = "00000000-0000-0000-0000-000000000000"
 migrations_dir = "migrations"
+
+# Activa el enlace solo después de autorizar y crear un bucket R2 privado.
+# [[r2_buckets]]
+# binding = "DOCUMENTS"
+# bucket_name = "appclase-documentos"

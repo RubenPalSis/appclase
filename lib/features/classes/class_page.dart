@@ -8,6 +8,7 @@ import '../../core/api.dart';
 import '../../core/widgets.dart';
 import '../../main.dart' show ThemeButton;
 import 'coursework.dart';
+import 'documents_page.dart';
 import 'exams.dart';
 
 enum ClassSection {
@@ -16,6 +17,7 @@ enum ClassSection {
   assignments('Tareas', Icons.assignment_outlined),
   exams('Exámenes', Icons.quiz_outlined),
   students('Alumnos', Icons.people_outline),
+  documents('Archivos', Icons.description_outlined),
   attendance('Asistencia', Icons.event_available_outlined);
 
   const ClassSection(this.label, this.icon);
@@ -107,7 +109,13 @@ class _ClassPageState extends ConsumerState<ClassPage> {
           final archived = course['archived'] == 1;
           final writable = staff && !archived;
           final sections = ClassSection.values
-              .where((item) => staff || item != ClassSection.students)
+              .where(
+                (item) => switch (item) {
+                  ClassSection.students => staff,
+                  ClassSection.documents => course['documents_enabled'] == true,
+                  _ => true,
+                },
+              )
               .toList();
           final index = sections.contains(selected)
               ? sections.indexOf(selected)
@@ -164,6 +172,10 @@ class _ClassPageState extends ConsumerState<ClassPage> {
               row: (item) =>
                   (title: item['name'] as String, subtitle: '', tap: null),
             ),
+            ClassSection.documents => DocumentsPage(
+              path: '$path/documents',
+              canUpload: writable,
+            ),
             ClassSection.attendance => AttendancePage(
               path: path,
               staff: staff,
@@ -171,6 +183,8 @@ class _ClassPageState extends ConsumerState<ClassPage> {
             ),
           };
           final wide = MediaQuery.sizeOf(context).width >= 850;
+          final mobile = sections.take(4).toList();
+          final more = sections.skip(4).toList();
           final nav = MediaQuery.sizeOf(context).width < 500
               ? NavigationDestinationLabelBehavior.onlyShowSelected
               : NavigationDestinationLabelBehavior.alwaysShow;
@@ -241,15 +255,45 @@ class _ClassPageState extends ConsumerState<ClassPage> {
             bottomNavigationBar: wide
                 ? null
                 : NavigationBar(
-                    selectedIndex: index,
+                    selectedIndex: index < 4 ? index : 4,
                     labelBehavior: nav,
-                    onDestinationSelected: (index) =>
-                        setState(() => selected = sections[index]),
+                    onDestinationSelected: (index) async {
+                      if (index < mobile.length) {
+                        setState(() => selected = mobile[index]);
+                        return;
+                      }
+                      final destination =
+                          await showModalBottomSheet<ClassSection>(
+                            context: context,
+                            builder: (sheet) => SafeArea(
+                              child: ListView(
+                                shrinkWrap: true,
+                                children: [
+                                  for (final item in more)
+                                    ListTile(
+                                      leading: Icon(item.icon),
+                                      title: Text(item.label),
+                                      selected: selected == item,
+                                      onTap: () => Navigator.pop(sheet, item),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          );
+                      if (destination != null && mounted) {
+                        setState(() => selected = destination);
+                      }
+                    },
                     destinations: [
-                      for (final item in sections)
+                      for (final item in mobile)
                         NavigationDestination(
                           icon: Icon(item.icon),
                           label: item.label,
+                        ),
+                      if (more.isNotEmpty)
+                        NavigationDestination(
+                          icon: const Icon(Icons.more_horiz),
+                          label: index < 4 ? 'Más' : sections[index].label,
                         ),
                     ],
                   ),

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
@@ -51,6 +52,20 @@ class Api {
   Future<Record> post(String path, [Record payload = const {}]) async =>
       ((await _request(path, payload)) as Record?) ?? {};
 
+  Future<void> upload(String path, String name, Uint8List bytes) async {
+    final uri = Uri.base
+        .resolve('/api$path')
+        .replace(queryParameters: {'name': name});
+    final response = await client
+        .post(
+          uri,
+          headers: {'Content-Type': 'application/octet-stream'},
+          body: bytes,
+        )
+        .timeout(const Duration(minutes: 2));
+    _decode(response);
+  }
+
   Future<Object?> _request(String path, [Record? payload]) async {
     final uri = Uri.base.resolve('/api$path');
     final response =
@@ -62,6 +77,10 @@ class Api {
                     body: jsonEncode(payload),
                   ))
             .timeout(const Duration(seconds: 20));
+    return _decode(response);
+  }
+
+  Object? _decode(http.Response response) {
     if (response.statusCode == 204) return null;
     final Object? data;
     try {

@@ -14,6 +14,7 @@ async function fixture(t) {
   sqlite.exec(migration);
   sqlite.exec(await readFile(new URL("../migrations/0002_exams.sql", import.meta.url), "utf8"));
   sqlite.exec(await readFile(new URL('../migrations/0003_membership_status.sql', import.meta.url), 'utf8'));
+  sqlite.exec(await readFile(new URL('../migrations/0004_documents.sql', import.meta.url), 'utf8'));
   sqlite.exec(`
     INSERT INTO users VALUES ('teacher','t@example.com','Profe'),('student','s@example.com','Alumna'),
       ('outside','x@example.com','Externo'),('other','o@example.com','Otro alumno'),('admin','a@example.com','Admin');
@@ -30,7 +31,13 @@ async function fixture(t) {
     sqlite.prepare('INSERT INTO sessions VALUES (?,?,?)').run(await hash(value), user, now() + 1000);
     sessions.set(user, value);
   }
+  const objects = new Map();
   const env = {
+    DOCUMENTS: {
+      put: (key, value) => objects.set(key, value),
+      get: key => objects.has(key) ? {body:objects.get(key)} : null,
+      delete: key => objects.delete(key),
+    },
     APP_ORIGIN: origin,
     DB: {
       prepare(sql) {
@@ -57,21 +64,22 @@ async function fixture(t) {
     },
   };
   return async (path, user, payload, from = origin) => {
+    const raw = payload instanceof Uint8Array;
     const headers = {};
     if (user) headers.Cookie = 'appclase_session=' + sessions.get(user);
     if (payload !== undefined) {
       headers.Origin = from;
-      headers['Content-Type'] = 'application/json';
+      headers['Content-Type'] = raw ? 'application/octet-stream' : 'application/json';
     }
     const result = await onRequest({
       request: new Request(origin + '/api' + path, {
         method: payload === undefined ? 'GET' : 'POST',
         headers,
-        body: payload === undefined ? undefined : JSON.stringify(payload),
+        body: payload === undefined ? undefined : raw ? payload : JSON.stringify(payload),
       }),
       env,
     });
-    return { status: result.status, data: result.status === 204 ? null : await result.json() };
+    return { status: result.status, data: result.status === 204 ? null : result.headers.has('content-disposition') ? new Uint8Array(await result.arrayBuffer()) : await result.json() };
   };
 }
 
@@ -164,4 +172,17 @@ test('gestión de usuarios, revocación sin reingreso y auditoría por centro', 
   assert.ok((await call('/organizations/center/audit','admin')).data.some(item => item.action === 'membership.disabled'));
   assert.equal((await call(endpoint,'admin',{email:'s@example.com',role:'student',active:true})).status, 200);
   assert.equal((await call('/classes/course','student')).status, 200);
+});
+
+test('documentos privados, validación de formato y autorización de subida', async t => {
+  const call = await fixture(t);
+  const route = '/classes/course/documents';
+  const pdf = new TextEncoder().encode('%PDF-1.7');
+  assert.equal((await call(route+'?name=temario.pdf','student',pdf)).status, 403);
+  assert.equal((await call(route+'?name=temario.pdf','teacher',new Uint8Array([0]))).status, 415);
+  assert.equal((await call(route+'?name=temario.svg','teacher',pdf)).status, 415);
+  const {data: {id}} = await call(route+'?name=temario.pdf','teacher',pdf);
+  assert.equal((await call(route+'/'+id,'outside')).status, 404);
+  assert.equal((await call(route,'student')).data[0].name, 'temario.pdf');
+  assert.deepEqual((await call(route+'/'+id,'student')).data, pdf);
 });

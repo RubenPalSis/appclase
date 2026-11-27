@@ -1,3 +1,4 @@
+import * as files from '../../server/documents.js';
 import * as administration from '../../server/administration.js';
 import { currentUser, logout, oauth } from '../../server/auth.js';
 import * as classes from '../../server/classes.js';
@@ -43,7 +44,15 @@ export async function onRequest({ request, env }) {
     if (parts[0] !== 'classes' || !parts[1]) throw new HttpError(404, 'Ruta no disponible.');
     const course = await classes.classAccess(db, parts[1], user);
     const section = parts[2];
-    if (parts.length === 2 && method === 'GET') return response(course);
+    if (parts.length === 2 && method === 'GET') return response({ ...course, documents_enabled: Boolean(env.DOCUMENTS) });
+    if (section === 'documents' && parts.length === 4 && method === 'GET') {
+      return await files.download(env, course, parts[3]);
+    }
+    if (section === 'documents' && parts.length === 3) {
+      return response(method === 'GET'
+        ? await files.documents(db, course)
+        : await files.upload(env, course, request, url.searchParams.get('name')));
+    }
     if (parts.length === 5 && section === 'assignments') {
       const [, , , id, action] = parts;
       if (action === 'deliver' && method === 'POST') return response(await learning.deliver(db, course, user, id, await jsonBody(request)));
