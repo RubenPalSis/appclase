@@ -148,6 +148,16 @@ test('entregas, notas privadas y asistencia individual', async t => {
   const [{id}] = (await call(route+'/assignments','student')).data;
   const endpoint = route+'/assignments/'+id;
   assert.equal((await call(endpoint+'/deliver','student',{body:'Respuesta privada'})).status, 200);
+  assert.equal((await call(endpoint,'outside')).status, 404);
+  assert.equal((await call(endpoint,'student')).data.task.answer, 'Respuesta privada');
+  const otherDetail = (await call(endpoint,'other')).data;
+  assert.equal(otherDetail.task.answer, null);
+  assert.equal(otherDetail.roster, undefined);
+  const {roster} = (await call(endpoint,'teacher')).data;
+  assert.equal(roster.find(row => row.user_id === 'student').body, 'Respuesta privada');
+  assert.equal(roster.find(row => row.user_id === 'other').submitted, null);
+  assert.equal((await call(route+'/assignments','teacher')).data[0].pending_reviews, 1);
+  assert.equal((await call(route+'/assignments','student')).data[0].pending_reviews, null);
   assert.equal((await call(endpoint+'/reviews','other')).status, 403);
   assert.equal((await call(endpoint+'/reviews','teacher',{user_id:'student',score:11,feedback:''})).status, 400);
   assert.equal((await call(endpoint+'/reviews','teacher',{user_id:'student',score:9,feedback:'Buen trabajo'})).status, 200);

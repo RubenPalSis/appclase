@@ -2,9 +2,31 @@ import { requireStaff } from './classes.ts';
 import { HttpError, first, integer, list, now, run, text } from './security.ts';
 
 export const assignments = (db, course, user) => list(db, `
-  SELECT a.*,s.submitted,s.body AS answer,s.score,s.feedback
+  SELECT a.*,s.submitted,s.body AS answer,s.score,s.feedback,
+    CASE WHEN ?<>'student' THEN (
+      SELECT COUNT(*) FROM submissions review
+      JOIN memberships m ON m.org_id=? AND m.user_id=review.user_id AND m.role='student' AND m.active=1
+      WHERE review.assignment_id=a.id AND review.score IS NULL
+    ) END AS pending_reviews
   FROM assignments a LEFT JOIN submissions s ON s.assignment_id=a.id AND s.user_id=?
-  WHERE a.class_id=? ORDER BY a.due,a.id LIMIT 100`, user.id, course.id);
+  WHERE a.class_id=? ORDER BY a.due,a.id LIMIT 100`, course.role, course.org_id, user.id, course.id);
+
+export async function assignmentDetail(db, course, user, id) {
+  const task = await first(db, `
+    SELECT a.*,s.submitted,s.body AS answer,s.score,s.feedback
+    FROM assignments a LEFT JOIN submissions s ON s.assignment_id=a.id AND s.user_id=?
+    WHERE a.class_id=? AND a.id=?`, user.id, course.id, id);
+  if (!task) throw new HttpError(404, 'No se encuentra la tarea.');
+  const detail = { task, role: course.role, archived: course.archived };
+  if (course.role === 'student') return detail;
+  const roster = await list(db, `
+    SELECT u.id AS user_id,u.name,s.body,s.submitted,s.score,s.feedback
+    FROM class_students cs JOIN users u ON u.id=cs.user_id
+    JOIN memberships m ON m.org_id=? AND m.user_id=u.id AND m.role='student' AND m.active=1
+    LEFT JOIN submissions s ON s.assignment_id=? AND s.user_id=u.id
+    WHERE cs.class_id=? ORDER BY u.name,u.id`, course.org_id, id, course.id);
+  return { ...detail, roster };
+}
 
 export async function addAssignment(db, course, data) {
   requireStaff(course);

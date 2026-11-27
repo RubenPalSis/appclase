@@ -38,6 +38,7 @@ export function AgendaCalendar({ renderRows }: { renderRows: (rows: Row[]) => Re
   const [today] = useState(() => new Date());
   const [month, setMonth] = useState(() => monthStart(today));
   const [day, setDay] = useState<number | null>(today.getDate());
+  const [kind, setKind] = useState('all');
   const [courses, setCourses] = useState<Row[]>([]);
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
   const [result, setResult] = useState<{ month: Date; rows: Row[]; error: string } | null>(null);
@@ -60,7 +61,7 @@ export function AgendaCalendar({ renderRows }: { renderRows: (rows: Row[]) => Re
     Promise.allSettled(courses.map(async course => {
       const events = await api.get<CalendarEvent[]>(`/classes/${course.id}/calendar${query}`);
       return events.map(event => ({
-        ...event, id: `${course.id}:${event.kind}:${event.id}`, type: event.kind, date: event.start,
+        ...event, id: `${course.id}:${event.kind}:${event.id}`, type: event.kind, assignmentId: event.id, date: event.start,
         class_id: course.id, name: course.subject, subjectColor: courseColor(course), subjectKey: subjectKey(course),
       }));
     })).then(results => {
@@ -74,7 +75,7 @@ export function AgendaCalendar({ renderRows }: { renderRows: (rows: Row[]) => Re
     return () => { active = false; };
   }, [courses, coursesLoaded, month]);
 
-  const rows = result?.month === month ? result.rows.filter(row => !excluded.has(row.class_id)) : [];
+  const rows = result?.month === month ? result.rows.filter(row => !excluded.has(row.class_id) && (kind === 'all' || row.kind === kind)) : [];
   const dayCount = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
   const leadingDays = (month.getDay() + 6) % 7;
   const days = Array.from({ length: dayCount }, (_, i) => {
@@ -132,6 +133,15 @@ export function AgendaCalendar({ renderRows }: { renderRows: (rows: Row[]) => Re
             );
           })}
         </div>
+        <label className="field mt-4">
+          <span>Tipo de actividad</span>
+          <select className="rounded-lg border border-line bg-surface p-2 text-sm" value={kind} onChange={event => setKind(event.target.value)}>
+            <option value="all">Todas</option>
+            <option value="assignment">Tareas</option>
+            <option value="exam">Exámenes</option>
+            <option value="event">Eventos</option>
+          </select>
+        </label>
         {courses.length > 0 && <div className="agenda-filter">
           <span className="side-label">MIS CLASES</span>
           {courses.map(course => <label key={course.id}>

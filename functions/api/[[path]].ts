@@ -103,6 +103,9 @@ export async function onRequest({ request, env }: { request: Request; env: Env }
         if (parts[4] === 'report') return response(await messages.report(db, course, user, parts[3], await jsonBody(request)));
       }
     }
+    if (parts.length === 4 && section === 'assignments' && method === 'GET') {
+      return response(await learning.assignmentDetail(db, course, user, parts[3]));
+    }
     if (parts.length === 5 && section === 'assignments') {
       const [, , , id, action] = parts;
       if (action === 'deliver' && method === 'POST') return response(await learning.deliver(db, course, user, id, await jsonBody(request)));
