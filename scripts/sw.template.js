@@ -24,7 +24,7 @@ self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
   if (event.request.mode === 'navigate') {
     // Keep the shell and its compiled assets on the same release until the new cache activates.
-    event.respondWith(caches.open(cacheName).then(async cache => (await cache.match('/index.html')) ?? fetch(event.request)));
+    event.respondWith(caches.open(cacheName).then(async cache => (await cache.match('/')) ?? fetch(event.request)));
     return;
   }
   if (publicFiles.has(url.pathname)) {

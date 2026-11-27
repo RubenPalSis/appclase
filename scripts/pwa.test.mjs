@@ -27,9 +27,10 @@ test('la PWA conserva el shell sin conexión y excluye API y descargas', async (
   let pending;
   const cache = {
     addAll: async requests => { all = requests.map(item => item.url); },
-    match: async path => path === '/index.html' ? shell : undefined,
+    match: async path => path === '/' ? shell : undefined,
   };
   runInNewContext(script, {
+    URL,
     Request: class {
       constructor(url) { this.url = url; }
     },
@@ -39,7 +40,7 @@ test('la PWA conserva el shell sin conexión y excluye API y descargas', async (
   });
   events.install({ waitUntil: promise => { pending = promise; } });
   await pending;
-  assert.ok(all.includes('/index.html'));
+  assert.ok(all.includes('/'));
   assert.ok(all.includes('/main.dart.js'));
   assert.ok(!all.some(path => path.startsWith('/api/')));
   const request = (path, mode = 'navigate') => {
