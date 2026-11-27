@@ -5,7 +5,7 @@ compatibility_date = "2026-11-27"
 [[d1_databases]]
 binding = "DB"
 database_name = "appclase"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "cc4b0417-67ed-48fd-87dd-3c83972ad343"
 migrations_dir = "migrations"
 
 # Activa el enlace solo después de autorizar y crear un bucket R2 privado.

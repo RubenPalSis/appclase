@@ -14,18 +14,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.50.1'
-          channel: stable
-          cache: true
-      - run: flutter pub get
-      - run: flutter analyze
-      - run: flutter test --platform chrome
-      - run: node --test scripts/api.test.mjs
-      - run: flutter build web
-      - run: node scripts/build_pwa.mjs
-      - run: node --test scripts/pwa.test.mjs
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
       - run: bash scripts/cloudflare-smoke.sh
       - uses: actions/upload-artifact@v4
         with:

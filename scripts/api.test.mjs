@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
-import { onRequest } from '../functions/api/[[path]].js';
-import { hash, now } from '../server/security.js';
+import { onRequest } from '../functions/api/[[path]].ts';
+import { hash, now } from '../server/security.ts';
+import { passwordRecord } from '../server/auth.ts';
 
 const origin = 'https://appclase.example';
 const migration = await readFile(new URL('../migrations/0001_initial.sql', import.meta.url), 'utf8');
@@ -100,6 +101,16 @@ test('autenticación, cierre de sesión y origen de escrituras', async t => {
   assert.equal((await call('/logout','student',{},'https://other.example')).status, 403);
   assert.equal((await call('/logout','student',{})).status, 204);
   assert.equal((await call('/me','student')).status, 401);
+});
+
+test('cambio de contraseña verifica la clave actual y conserva solo la sesión activa', async t => {
+  const call = await fixture(t);
+  const { salt, digest } = await passwordRecord('Clave anterior segura 123');
+  call.sqlite.prepare('INSERT INTO password_credentials (user_id,salt,digest) VALUES (?,?,?)').run('teacher', salt, digest);
+  assert.equal((await call('/auth/password','teacher',{current_password:'incorrecta',password:'Nueva clave muy segura 123'})).status, 401);
+  assert.equal((await call('/auth/password','teacher',{current_password:'Clave anterior segura 123',password:'Clave anterior segura 123'})).status, 400);
+  assert.equal((await call('/auth/password','teacher',{current_password:'Clave anterior segura 123',password:'Nueva clave muy segura 123'})).status, 200);
+  assert.equal(call.sqlite.prepare('SELECT COUNT(*) AS count FROM sessions WHERE user_id=?').get('teacher').count, 1);
 });
 
 test('aislamiento entre centros y prohibición de cambios para alumnos', async t => {

@@ -1,0 +1,18 @@
+{
+  "id": "/",
+  "name": "APPCLASE · Tu espacio educativo",
+  "short_name": "APPCLASE",
+  "description": "Un espacio claro para enseñar, aprender y avanzar en equipo.",
+  "lang": "es",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f6f8f6",
+  "theme_color": "#126a53",
+  "icons": [
+    {"src": "/icons/Icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "/icons/Icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "/icons/Icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}

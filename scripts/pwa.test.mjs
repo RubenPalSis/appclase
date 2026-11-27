@@ -12,7 +12,7 @@ test('el manifest describe una PWA instalable con iconos reales', async () => {
   assert.equal(manifest.scope, '/');
   assert.equal(manifest.display, 'standalone');
   for (const icon of manifest.icons) {
-    const png = await readFile(new URL(icon.src, build));
+    const png = await readFile(new URL(`.${icon.src}`, build));
     const [width, height] = icon.sizes.split('x').map(Number);
     assert.equal(png.readUInt32BE(16), width);
     assert.equal(png.readUInt32BE(20), height);
@@ -27,23 +27,24 @@ test('la PWA conserva el shell sin conexión y excluye API y descargas', async (
   let activated = false;
   let pending;
   const cache = {
-    addAll: async requests => { all = requests.map(item => item.url); },
-    match: async path => path === '/' ? shell : undefined,
+    addAll: async requests => { all = requests.map(item => typeof item === 'string' ? item : item.url); },
+    match: async path => path === '/' || path?.url === origin + '/' ? shell : undefined,
   };
   runInNewContext(script, {
     URL,
     Request: class {
       constructor(url) { this.url = url; }
     },
-    fetch() { throw new Error('Desconectado'); },
-    caches: { open: async () => cache },
+    fetch() { return Promise.reject(new Error('Desconectado')); },
+    caches: { open: async () => cache, match: cache.match },
     self: { skipWaiting: async () => { activated = true; }, location: { origin }, addEventListener: (name, handle) => { events[name] = handle; } },
   });
   events.install({ waitUntil: promise => { pending = promise; } });
   await pending;
   assert.equal(activated, true);
   assert.ok(all.includes('/'));
-  assert.ok(all.includes('/main.dart.js'));
+  assert.ok(all.includes('/manifest.json'));
+  assert.ok(!all.some(path => path.includes('dart')));
   assert.ok(!all.includes('/.last_build_id'));
   assert.ok(!all.some(path => path.startsWith('/api/')));
   const request = (path, mode = 'navigate') => {

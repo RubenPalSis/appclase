@@ -55,11 +55,11 @@ assert.equal((await auth.json()).organizations[0].role, 'teacher');
 const created = await fetch(origin+'/api/classes', {
   method: 'POST',
   headers: { cookie, origin, 'Content-Type': 'application/json' },
-  body: JSON.stringify({org_id:'smoke',name:'Prueba',subject:'Flutter',description:'',academic_year:'2026'}),
+  body: JSON.stringify({org_id:'smoke',name:'Prueba',subject:'TypeScript',description:'',academic_year:'2026'}),
 });
 assert.equal(created.status, 200, await created.clone().text());
 const {id} = await created.json();
-assert.ok((await (await fetch(origin+'/clases/'+id)).text()).includes('<title>APPCLASE</title>'));
+assert.ok((await (await fetch(origin+'/clases/'+id)).text()).includes('<title>APPCLASE · Tu espacio de aprendizaje</title>'));
 const post = await fetch(origin+'/api/classes/'+id+'/posts', {
   method:'POST', headers:{cookie,origin,'Content-Type':'application/json'}, body:JSON.stringify({body:'Prueba de publicación'}),
 });

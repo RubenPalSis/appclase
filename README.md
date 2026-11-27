@@ -1,85 +1,105 @@
 # APPCLASE
 
-Plataforma educativa web instalable escrita en Flutter y Dart. La aplicación y la API comparten origen en Cloudflare Pages. La API usa Pages Functions, que se ejecuta en el runtime de Workers, y almacena sus datos en D1.
+APPCLASE es una plataforma educativa web instalable para centros educativos, academias y clases particulares. La interfaz usa **React + TypeScript + Vite**, Tailwind CSS y componentes propios basados en patrones de shadcn/ui. La API se ejecuta en Cloudflare Pages Functions; los datos y las sesiones viven en Cloudflare D1.
 
-## Funciones incluidas
+## Estado del producto
 
-- Cuentas propias con correo, contraseña derivada con PBKDF2 y sesiones HttpOnly. Revocación de la sesión al cerrar sesión.
-- Roles de administrador, profesor y alumno por centro. El administrador puede acceder a las clases del centro. El profesor solo accede a las clases de las que es responsable. El alumno necesita estar matriculado.
-- Administración de accesos de profesores y alumnos, nombre de centro e historial administrativo.
-- Panel de clases y próximas entregas y exámenes, filtrados por acceso y estado de entrega.
-- Creación y archivo de clases, invitaciones revocables vía rotación con caducidad de siete días y listado de alumnos.
-- Tablón con comentarios, permisos del alumnado, edición, eliminación, publicaciones fijadas y programación. Temario organizado en unidades, temas, subtemas, lecciones y carpetas, con orden editable, búsqueda, texto y enlaces HTTPS. Subida y descarga privada de documentos si se conecta el bucket R2.
-- Tareas individuales con fecha límite, entregas de texto o enlace, corrección y feedback privado.
-- Exámenes de respuesta única, con apertura y cierre, temporizador, intentos limitados, guardado en el servidor y corrección automática. Las claves de respuesta se quedan en el servidor. El alumno ve su puntuación después del cierre.
-- Calendario de clase con vistas de mes, semana y día en formato agenda, eventos, tareas, exámenes y exportación ICS. Resumen de notas por alumno y descarga CSV para el profesorado.
-- Mensajes privados entre alumno y profesor responsable, búsqueda por interlocutor, contador de no leídos, refresco mientras se consulta y reportes visibles para el administrador del centro.
-- Centro de avisos para anuncios, materiales, tareas, exámenes, notas y mensajes, con preferencias por tipo.
-- Registro de asistencia por fecha y consulta privada por alumno.
-- Interfaz adaptable y modos de color. El service worker guarda solo el código y los recursos estáticos. La API académica requiere conexión.
+La aplicación ya tiene acceso por correo y contraseña, alta de cuentas, activación obligatoria de cuentas docentes con contraseña temporal y código del centro, perfiles por rol, centros, clases, gestión de miembros, tablón, materiales, tareas, exámenes de opción múltiple, calendario, notas, asistencia, mensajes, avisos y exportaciones de calendario/notas donde la API ya las ofrece. La navegación, panel y áreas de trabajo cambian entre administración de plataforma, profesorado y alumnado.
 
-La versión actual requiere más desarrollo para cubrir todos los requisitos. Faltan la creación de centros desde la interfaz, la verificación del correo y la recuperación de contraseña, texto enriquecido y arrastrar y soltar en temario, adjuntos en publicaciones, el cuaderno con ponderaciones y PDF, mensajería grupal y adjuntos de mensajes, notificaciones push y recordatorios programados, sincronización académica sin conexión, los estilos adicionales de examen y los flujos de exportación y eliminación de datos personales. Las listas devuelven hasta 100 registros y necesitan paginación para centros con más volumen. La instalación en distintos navegadores, la accesibilidad y la autenticación y D1 en remoto deben validarse antes de un piloto. No utilizar datos reales de alumnado hasta completar esa revisión y las medidas de privacidad del centro.
+La API valida permisos en el servidor; ocultar una opción en la interfaz no concede ni revoca acceso. Las rutas y tablas existentes de D1 se conservan durante esta migración.
 
-## Código y datos
+El producto aún requiere trabajo antes de comercializarlo con centros reales: completar controles operativos de calificación y asistencia, formularios de examen y entrega, verificación y recuperación de correo, política/retención de datos, pruebas de accesibilidad y revisión de privacidad aplicable a cada centro. Los archivos de materiales requieren configurar un bucket R2 privado; el binding no está activado en este repositorio. No se deben cargar datos reales de menores hasta completar las revisiones del centro y de privacidad.
 
-| Ruta | Responsabilidad |
-| --- | --- |
-| `lib/core` | Cliente HTTP, proveedores Riverpod y componentes comunes |
-| `lib/features` | Sesión, panel, clases y trabajo académico |
-| `functions/api` | Enrutamiento HTTP de Pages Functions |
-| `server` | Autenticación, permisos y operaciones de clases y evaluación |
-| `migrations` | Esquema SQL versionado con índices y claves externas |
-| `web` | Manifest, recursos, página inicial y cabeceras |
-| `scripts` | Generación del service worker y pruebas de API |
-| `.github/workflows` | Verificación y despliegue opcional |
+## Arquitectura
 
-Las tablas administrators, teachers y students reflejan las pertenencias por centro mediante disparadores SQL. Las clases conservan su profesor responsable y la matrícula del alumnado en class_students. Las sesiones contienen hashes de tokens con caducidad. Las notas y los intentos se relacionan con el alumno y la tarea o examen. Las operaciones de archivo e invitación se registran en auditoría. El navegador utiliza la misma API para todos los roles y la autorización se verifica contra D1 en el servidor.
+```text
+src/                         React, TypeScript, rutas y experiencia por rol
+src/lib/api.ts               Cliente HTTP same-origin con cookie de sesión
+functions/api/[[path]].ts    Enrutador Cloudflare Pages Functions
+server/*.ts                  Servicios de dominio, autenticación y validaciones
+migrations/*.sql             Esquema D1 versionado
+public/                      Manifest, iconos, service worker y cabeceras
+scripts/                     Pruebas de API, PWA y humo en Wrangler
+```
 
-## Desarrollo local
+Las cuentas, centros, membresías y datos académicos mantienen el esquema D1 actual. Las sesiones usan cookies `HttpOnly`, `SameSite=Lax` y `Secure` bajo HTTPS. La PWA guarda el shell y recursos estáticos permitidos; nunca almacena las respuestas de `/api` en caché.
 
-Requisitos: Flutter 3.50.1 estable, Dart 3.14, Node.js 24, Google Chrome para el test de widgets y Wrangler 4.
+## Requisitos
+
+- Node.js 24 LTS.
+- npm 11 o compatible.
+- Wrangler 4 para Pages y D1 local/remoto.
+
+## Ejecución local
 
 ```sh
-cp -n secretos.env.example secretos.env
-flutter pub get
-flutter analyze
-flutter test --platform chrome
-node --test scripts/api.test.mjs
-flutter build web
-node scripts/build_pwa.mjs
-npx --yes wrangler@4.168.0 d1 migrations apply appclase --local
-npx --yes wrangler@4.168.0 pages dev build/web --port 8788
+npm ci
+npm run dev
 ```
 
-La API y Flutter deben abrirse desde el mismo origen, por ejemplo `http://localhost:8788`. `secretos.env` sirve para preparar la configuración y permanece excluido de Git. No cargues los tokens de despliegue en el navegador ni en `.dev.vars`.
+Para probar la API y D1 en el mismo origen de Pages:
 
-Las pruebas de API ejecutan las migraciones y el manejador real sobre SQLite local. La capa D1 de prueba simula su interfaz. El flujo de CI también prueba Pages Functions y D1 con Wrangler local, sin credenciales externas. Para comprobar el acceso, inicia sesión desde la PWA y recorre los flujos con dos cuentas en el mismo centro y una tercera en otro centro.
+```sh
+npm run build
+npx wrangler pages dev build/web --port 8788
+```
 
-## Primer centro y administrador
+Abre `http://localhost:8788`. Las migraciones locales se aplican con:
 
-Crea tu cuenta en APPCLASE y copia su ID desde Mi cuenta. Coteja personalmente los ID antes de asignar roles privilegiados. Ejecuta manualmente esta inicialización en la consola D1 de tu entorno, sustituyendo el correo de ejemplo. Úsala únicamente con un administrador autorizado.
+```sh
+npx wrangler d1 migrations apply appclase --local
+```
+
+Para inspeccionar las rutas Pages y D1 con datos efímeros, ejecuta `bash scripts/cloudflare-smoke.sh`.
+
+## Pruebas y compilación
+
+```sh
+npm run build
+npm test
+```
+
+`npm run build` comprueba los componentes React y TypeScript de cliente y API, y genera el sitio estático en `build/web`. `npm test` ejecuta las pruebas de API con SQLite local y las comprobaciones del manifest/service worker. GitHub Actions ejecuta también una prueba de humo con Wrangler Pages y D1.
+
+## Configuración de Cloudflare
+
+1. Crea una base D1 llamada `appclase` y configura su UUID en `wrangler.toml` para el entorno que corresponda.
+2. Aplica las migraciones con `npx wrangler d1 migrations apply appclase --remote`.
+3. Crea el proyecto Pages `appclase` y conecta el repositorio o publica el artefacto `build/web`.
+4. En GitHub, guarda `CLOUDFLARE_API_TOKEN` y `CLOUDFLARE_ACCOUNT_ID` como secretos del entorno `production`. No los pongas en `VITE_*`, código del navegador ni el repositorio.
+5. El despliegue continuo queda condicionado a `APPCLASE_DEPLOY=true`; si no está habilitado, CI solo verifica y genera el artefacto. Pages aplica HTTPS y permite conectar un dominio personalizado desde el panel de Cloudflare.
+6. Para archivos, configura un bucket R2 privado y habilita el binding `DOCUMENTS` solo tras revisar límites, acceso y coste.
+
+`secretos.env.example` es una plantilla local sin secretos. El archivo `secretos.env` está excluido de Git. No actives servicios con facturación sin revisar primero límites y precios vigentes.
+
+## Primer centro y administración
+
+El usuario autorizado se registra y un operador con acceso administrativo a D1 le asigna el rol de plataforma una sola vez. El administrador inicial ya provisionado no requiere repetir este paso. En una instalación nueva, sustituye el correo por el de la cuenta que acabas de verificar:
 
 ```sql
-INSERT INTO organizations (id, name) VALUES ('centro-inicial', 'Mi centro');
-INSERT INTO memberships (org_id, user_id, role)
-SELECT 'centro-inicial', id, 'admin' FROM users WHERE id='ID_DE_TU_CUENTA';
+INSERT OR IGNORE INTO platform_administrators (user_id)
+SELECT id FROM users WHERE email = lower('admin@centro.es');
 ```
 
-Para conceder el rol de profesor, añade una pertenencia `teacher` al centro tras cotejar personalmente su ID de cuenta. Las invitaciones de clase solo pueden crear pertenencias de alumno. Ningún parámetro de registro otorga privilegios.
+Ejecuta ese SQL únicamente en la D1 correcta y comprueba que devuelve una fila. No se permite autoasignar privilegios desde el navegador. El administrador global crea centros y cuentas docentes desde APPCLASE; la contraseña temporal se muestra una sola vez y el docente debe conocer también el código del centro para el primer acceso. El profesor solo gestiona las clases y el alumnado que permite su asociación en D1.
 
-## Despliegue previsto
+## Seguridad y privacidad
 
-1. Crea una base D1 denominada `appclase` y sustituye su UUID de marcador en `wrangler.toml`. Usa otra base y otro proyecto Pages para pruebas remotas.
-2. Crea un proyecto Pages de Direct Upload denominado `appclase`. Se puede conectar un dominio personalizado desde Pages y activar HTTPS.
-3. Configura opcionalmente `APP_ORIGIN` en Cloudflare con el origen de la aplicación.
-4. Añade `CLOUDFLARE_ACCOUNT_ID` y un `CLOUDFLARE_API_TOKEN` con el acceso mínimo a Pages y D1 a los secretos del entorno `production` de GitHub. Activa `APPCLASE_DEPLOY=true` como variable del repositorio cuando la infraestructura esté lista.
-5. La acción aplica las migraciones y publica el resultado de Flutter y las Functions. La navegación SPA usa el fallback de Pages a `index.html`. El service worker precarga la versión estática nueva y la utiliza tras cerrar las pestañas que mantienen activa la versión anterior.
+- Las comprobaciones de rol y pertenencia ocurren en Pages Functions antes de consultar o modificar los datos.
+- Los cambios POST validan el origen y la API aplica validación y límites de longitud/valor.
+- Las contraseñas se derivan con PBKDF2 y las sesiones almacenan hashes de token.
+- Las respuestas de examen no publican las claves correctas en el navegador.
+- Los datos académicos no se cachean en el service worker.
+- Antes de operar con alumnado real, revisa RGPD/LOPDGDD, contratos con encargados, retención y eliminación, permisos del personal, avisos de privacidad y procedimiento ante incidentes con el centro.
 
-Workers, Pages y D1 disponen de cuotas gratuitas sujetas a límites. R2 requiere suscripción y puede facturar por exceso. Este código no crea recursos ni habilita servicios facturables. Para activar la pestaña Archivos, crea un bucket privado, mantén deshabilitado el acceso público y añade el binding `DOCUMENTS` indicado en `wrangler.toml`. La API comprueba pertenencia, tamaño y firma básica. Los documentos se sirven como descargas y la aplicación no inspecciona malware ni el contenido interno de archivos Office.
+## Costes y límites
+
+Pages, Workers y D1 pueden servir un piloto dentro de las cuotas gratuitas vigentes, sujetas a cambios y límites de uso. R2 puede facturar si se exceden sus cuotas o condiciones. El código no activa servicios adicionales facturables. La entrega de correo, push, respaldo operativo y alto volumen pueden requerir proveedores o planes adicionales.
 
 ## Diagnóstico
 
-- Si el acceso devuelve un error del servidor, comprueba que aplicaste las migraciones y que Pages tiene el binding D1.
-- Si ha iniciado sesión y no aparecen centros, comprueba la pertenencia en D1. Un alumno también puede entrar con una invitación vigente.
-- Si la nueva versión todavía no se muestra, cierra las demás pestañas de APPCLASE y abre la web de nuevo.
-- Si D1 devuelve un error tras un cambio de esquema, comprueba en Wrangler que aplicaste las migraciones al mismo entorno que usa Pages.
+- `401` al consultar la sesión: inicia sesión otra vez o comprueba que Pages y la API comparten el mismo origen.
+- No aparece un centro o clase: revisa las asociaciones y estado activo en D1; la interfaz no sustituye las reglas del servidor.
+- El primer acceso docente falla: verifica correo, contraseña temporal, código del centro y asociación activa.
+- Una publicación no aparece tras desplegar: actualiza el service worker cerrando pestañas APPCLASE antiguas y vuelve a abrir la web.
+- Error de esquema D1: aplica las migraciones al mismo binding que está configurado en el proyecto Pages.

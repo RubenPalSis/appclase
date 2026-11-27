@@ -1,5 +1,0 @@
-:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
-body { margin: 0; background: #f6faf7; color: #123b31; }
-#loading { min-height: 100dvh; display: grid; place-content: center; justify-items: center; text-align: center; padding: 0 1rem; }
-h1 { margin: 1rem 0 0; letter-spacing: .06em; }
-@media (prefers-color-scheme: dark) { body { background: #10241e; color: #d3f2e6; } }

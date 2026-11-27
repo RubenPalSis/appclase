@@ -4,9 +4,9 @@ secretos.env
 .dev.vars*
 .wrangler/
 node_modules/
-.dart_tool/
-.flutter-plugins-dependencies
 build/
+dist/
+*.tsbuildinfo
 .idea/
 *.iml
 coverage/
