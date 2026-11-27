@@ -1,3 +1,4 @@
+import * as materials from '../../server/materials.js';
 import { upcoming } from '../../server/dashboard.js';
 import * as board from '../../server/board.js';
 import * as notices from '../../server/notifications.js';
@@ -60,6 +61,9 @@ export async function onRequest({ request, env }) {
     const course = await classes.classAccess(db, parts[1], user);
     const section = parts[2];
     if (parts.length === 2 && method === 'GET') return response({ ...course, documents_enabled: Boolean(env.DOCUMENTS) });
+    if (section === 'topics' && parts.length === 4 && method === 'POST') {
+      return response(await materials.moveTopic(db, course, parts[3], await jsonBody(request)));
+    }
     if (section === 'documents' && parts.length === 4 && method === 'GET') {
       return await files.download(env, course, parts[3]);
     }
@@ -106,7 +110,8 @@ export async function onRequest({ request, env }) {
         case 'calendar': return response(await calendar.events(db, course, url));
         case 'grades': return response(await grades.gradeRows(db, course, user));
         case 'posts': return response(await board.board(db, course, user));
-        case 'materials': return response(await list(db, 'SELECT * FROM materials WHERE class_id=? ORDER BY created DESC,id DESC LIMIT 100', course.id));
+        case 'topics': return response(await materials.sections(db, course, url));
+        case 'materials': return response(await materials.resources(db, course, url));
         case 'exams': return response(await exams.examList(db, course, user));
         case 'assignments': return response(await learning.assignments(db, course, user));
         case 'students': return response(await learning.students(db, course));
@@ -119,7 +124,8 @@ export async function onRequest({ request, env }) {
         case 'calendar': return response(await calendar.addEvent(db, course, data));
         case 'board-settings': return response(await board.permissions(db, course, user, data));
         case 'posts': return response(await board.publish(db, course, user, data));
-        case 'materials': return response(await classes.createMaterial(db, course, data));
+        case 'topics': return response(await materials.createTopic(db, course, data));
+        case 'materials': return response(await materials.addResource(db, course, data));
         case 'exams': return response(await exams.createExam(db, course, data));
         case 'assignments': return response(await learning.addAssignment(db, course, data));
         case 'attendance': return response(await learning.markAttendance(db, course, data));

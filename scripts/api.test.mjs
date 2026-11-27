@@ -19,6 +19,7 @@ async function fixture(t) {
   sqlite.exec(await readFile(new URL('../migrations/0006_messages.sql', import.meta.url), 'utf8'));
   sqlite.exec(await readFile(new URL('../migrations/0007_notifications.sql', import.meta.url), 'utf8'));
   sqlite.exec(await readFile(new URL('../migrations/0008_board.sql', import.meta.url), 'utf8'));
+  sqlite.exec(await readFile(new URL('../migrations/0009_topics.sql', import.meta.url), 'utf8'));
   sqlite.exec(`
     INSERT INTO users VALUES ('teacher','t@example.com','Profe'),('student','s@example.com','Alumna'),
       ('outside','x@example.com','Externo'),('other','o@example.com','Otro alumno'),('admin','a@example.com','Admin');
@@ -280,4 +281,18 @@ test('panel de próximas entregas respeta pertenencia y entregas realizadas', as
   await call(route+'/'+id+'/deliver','student',{body:'Respuesta'});
   assert.deepEqual((await call('/dashboard/upcoming','student')).data, []);
   assert.equal((await call('/dashboard/upcoming','teacher')).data.length, 1);
+});
+
+test('temario jerárquico, búsqueda y permisos de escritura', async t => {
+  const call = await fixture(t);
+  const route = '/classes/course';
+  assert.equal((await call(route+'/topics','student',{title:'Unidad',kind:'unit',sort_order:0})).status,403);
+  assert.equal((await call(route+'/topics','teacher',{title:'Unidad',kind:'unit',sort_order:0})).status,200);
+  const [{id}] = (await call(route+'/topics','student')).data;
+  assert.equal((await call(route+'/topics','teacher',{title:'Tema',kind:'topic',topic_id:id,sort_order:0})).status,200);
+  assert.equal((await call(route+'/topics?topic='+id,'student')).data[0].title,'Tema');
+  assert.equal((await call(route+'/materials','teacher',{title:'Aragón',body:'Zaragoza %',topic_id:id})).status,200);
+  assert.deepEqual((await call(route+'/materials','student')).data,[]);
+  assert.equal((await call(route+'/materials?q=%25','student')).data[0].topic,'Unidad');
+  assert.equal((await call(route+'/topics?topic='+id,'outside')).status,404);
 });

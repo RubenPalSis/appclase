@@ -1,4 +1,4 @@
-import { HttpError, first, list, now, run, statement, text, token } from './security.js';
+import { HttpError, first, list, now, statement, text, token } from './security.js';
 
 export const organizations = (db, user) => list(db, `
   SELECT o.id,o.name,m.role FROM memberships m JOIN organizations o ON o.id=m.org_id
@@ -84,14 +84,5 @@ export async function archive(db, course, user, data) {
     statement(db, 'UPDATE classes SET archived=? WHERE id=?', Number(data.archived), course.id),
     audit(db, course.org_id, user.id, data.archived ? 'class.archived' : 'class.restored', course.id),
   ]);
-  return {};
-}
-
-export async function createMaterial(db, course, data) {
-  requireStaff(course);
-  let url;
-  try { url = new URL(text(data.url, 2000)); } catch { throw new HttpError(400, 'Introduce un enlace HTTPS válido.'); }
-  if (url.protocol !== 'https:' || url.username || url.password) throw new HttpError(400, 'Introduce un enlace HTTPS válido.');
-  await run(db, 'INSERT INTO materials VALUES (?,?,?,?,?)', crypto.randomUUID(), course.id, text(data.title, 160), url.href, now());
   return {};
 }

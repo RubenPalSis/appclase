@@ -9,7 +9,7 @@ Plataforma educativa web instalable escrita en Flutter y Dart. La aplicación y 
 - Administración de accesos de profesores y alumnos, nombre de centro e historial administrativo.
 - Panel de clases y próximas entregas y exámenes, filtrados por acceso y estado de entrega.
 - Creación y archivo de clases, invitaciones revocables vía rotación con caducidad de siete días y listado de alumnos.
-- Tablón con comentarios, permisos del alumnado, edición, eliminación, publicaciones fijadas y programación. Materiales mediante enlaces HTTPS. Subida y descarga privada de documentos si se conecta el bucket R2.
+- Tablón con comentarios, permisos del alumnado, edición, eliminación, publicaciones fijadas y programación. Temario organizado en unidades, temas, subtemas, lecciones y carpetas, con orden editable, búsqueda, texto y enlaces HTTPS. Subida y descarga privada de documentos si se conecta el bucket R2.
 - Tareas individuales con fecha límite, entregas de texto o enlace, corrección y feedback privado.
 - Exámenes de respuesta única, con apertura y cierre, temporizador, intentos limitados, guardado en el servidor y corrección automática. Las claves de respuesta se quedan en el servidor. El alumno ve su puntuación después del cierre.
 - Calendario de clase con vistas de mes, semana y día en formato agenda, eventos, tareas, exámenes y exportación ICS. Resumen de notas por alumno y descarga CSV para el profesorado.
@@ -18,7 +18,7 @@ Plataforma educativa web instalable escrita en Flutter y Dart. La aplicación y 
 - Registro de asistencia por fecha y consulta privada por alumno.
 - Interfaz adaptable y modos de color. El service worker guarda solo el código y los recursos estáticos. La API académica requiere conexión.
 
-La versión actual requiere más desarrollo para cubrir todos los requisitos. Faltan la creación de centros desde la interfaz, el acceso por correo y contraseña, temario jerárquico, adjuntos en publicaciones, el cuaderno con ponderaciones y PDF, mensajería grupal y adjuntos de mensajes, notificaciones push y recordatorios programados, sincronización académica sin conexión, los estilos adicionales de examen y los flujos de exportación y eliminación de datos personales. Las listas devuelven hasta 100 registros y necesitan paginación para centros con más volumen. La instalación en distintos navegadores, la accesibilidad y los flujos OAuth y D1 remotos deben validarse antes de un piloto. No utilizar datos reales de alumnado hasta completar esa revisión y las medidas de privacidad del centro.
+La versión actual requiere más desarrollo para cubrir todos los requisitos. Faltan la creación de centros desde la interfaz, el acceso por correo y contraseña, texto enriquecido y arrastrar y soltar en temario, adjuntos en publicaciones, el cuaderno con ponderaciones y PDF, mensajería grupal y adjuntos de mensajes, notificaciones push y recordatorios programados, sincronización académica sin conexión, los estilos adicionales de examen y los flujos de exportación y eliminación de datos personales. Las listas devuelven hasta 100 registros y necesitan paginación para centros con más volumen. La instalación en distintos navegadores, la accesibilidad y los flujos OAuth y D1 remotos deben validarse antes de un piloto. No utilizar datos reales de alumnado hasta completar esa revisión y las medidas de privacidad del centro.
 
 ## Código y datos
 

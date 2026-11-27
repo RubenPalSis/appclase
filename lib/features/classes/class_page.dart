@@ -2,7 +2,6 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:web/web.dart' as web;
 
 import '../../core/api.dart';
 import '../../core/widgets.dart';
@@ -12,6 +11,7 @@ import 'calendar_page.dart';
 import 'coursework.dart';
 import 'documents_page.dart';
 import 'exams.dart';
+import 'materials_page.dart';
 import 'messages_page.dart';
 
 enum ClassSection {
@@ -128,24 +128,9 @@ class _ClassPageState extends ConsumerState<ClassPage> {
               : 0;
           final body = switch (sections[index]) {
             ClassSection.board => BoardPage(course: course),
-            ClassSection.materials => RecordsPage(
-              path: '$path/materials',
-              empty: 'Aún no se han añadido materiales.',
-              action: writable ? 'Añadir material' : null,
-              fields: [
-                field('title', 'Título', 160),
-                field('url', 'Enlace HTTPS', 2000),
-              ],
-              leading: Icons.link,
-              row: (item) => (
-                title: item['title'] as String,
-                subtitle: Uri.parse(item['url'] as String).host,
-                tap: () => web.window.open(
-                  item['url'] as String,
-                  '_blank',
-                  'noopener,noreferrer',
-                ),
-              ),
+            ClassSection.materials => MaterialsPage(
+              path: path,
+              writable: writable,
             ),
             ClassSection.assignments => AssignmentsPage(
               path: path,
