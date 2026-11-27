@@ -25,6 +25,7 @@ jobs:
       - run: node --test scripts/api.test.mjs
       - run: flutter build web
       - run: node scripts/build_pwa.mjs
+      - run: node --test scripts/pwa.test.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: appclase-web

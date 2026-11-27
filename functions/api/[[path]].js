@@ -1,3 +1,4 @@
+import * as notices from '../../server/notifications.js';
 import * as messages from '../../server/messages.js';
 import * as calendar from '../../server/calendar.js';
 import * as grades from '../../server/grades.js';
@@ -29,6 +30,13 @@ export async function onRequest({ request, env }) {
     const db = env.DB;
     if (url.pathname === '/api/logout' && method === 'POST') return await logout(request, env, origin);
     if (url.pathname === '/api/me' && method === 'GET') return response({ user, organizations: await classes.organizations(db, user) });
+    if (url.pathname === '/api/notifications' && method === 'GET') return response(await notices.notifications(db, user));
+    if (url.pathname === '/api/notifications/read' && method === 'POST') {
+      return response(await notices.readNotification(db, user, (await jsonBody(request)).id));
+    }
+    if (url.pathname === '/api/notifications/preferences') return response(method === 'GET'
+      ? await notices.preferences(db, user)
+      : await notices.setPreference(db, user, await jsonBody(request)));
     if (url.pathname === '/api/join' && method === 'POST') return response(await classes.joinClass(db, user, await jsonBody(request)));
     if (url.pathname === '/api/classes') return response(method === 'GET'
       ? await classes.visibleClasses(db, user)

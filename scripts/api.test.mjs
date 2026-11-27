@@ -17,6 +17,7 @@ async function fixture(t) {
   sqlite.exec(await readFile(new URL('../migrations/0004_documents.sql', import.meta.url), 'utf8'));
   sqlite.exec(await readFile(new URL('../migrations/0005_calendar.sql', import.meta.url), 'utf8'));
   sqlite.exec(await readFile(new URL('../migrations/0006_messages.sql', import.meta.url), 'utf8'));
+  sqlite.exec(await readFile(new URL('../migrations/0007_notifications.sql', import.meta.url), 'utf8'));
   sqlite.exec(`
     INSERT INTO users VALUES ('teacher','t@example.com','Profe'),('student','s@example.com','Alumna'),
       ('outside','x@example.com','Externo'),('other','o@example.com','Otro alumno'),('admin','a@example.com','Admin');
@@ -233,4 +234,20 @@ test('conversaciones privadas, no leídos y moderación de mensajes reportados',
   assert.equal((await call(endpoint+'/report','student',{id:sequence,reason:'Motivo de prueba'})).status, 200);
   assert.equal((await call('/organizations/center/reports','admin')).data[0].body, 'Revisa el temario');
   assert.equal((await call('/organizations/center/reports','teacher')).status, 404);
+});
+
+test('notificaciones privadas, leídas y filtrado por preferencias', async t => {
+  const call = await fixture(t);
+  await call('/classes/course/posts','teacher',{body:'Anuncio'});
+  await call('/classes/course/messages/student','teacher',{body:'Mensaje'});
+  assert.deepEqual((await call('/notifications','other')).data.map(n => n.category), ['announcement']);
+  const notices = (await call('/notifications','student')).data;
+  assert.deepEqual(notices.map(n => n.category), ['message','announcement']);
+  assert.equal((await call('/notifications/read','other',{id:notices[0].id})).status, 404);
+  assert.equal((await call('/notifications/read','student',{id:notices[0].id})).status, 200);
+  assert.equal((await call('/notifications','student')).data[0].seen, 1);
+  assert.equal((await call('/notifications/preferences','student',{category:'announcement',enabled:false})).status, 200);
+  assert.equal((await call('/notifications','student')).data.length, 1);
+  await call('/notifications/preferences','student',{category:'announcement',enabled:true});
+  assert.equal((await call('/notifications','student')).data.length, 2);
 });

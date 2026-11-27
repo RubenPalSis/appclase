@@ -6,6 +6,7 @@ import 'package:web/web.dart' as web;
 import '../../core/api.dart';
 import '../../core/widgets.dart';
 import '../../main.dart' show ThemeButton;
+import '../notifications/notifications_page.dart';
 
 class AccessPage extends StatelessWidget {
   const AccessPage({super.key});
@@ -134,6 +135,7 @@ class HomePage extends ConsumerWidget {
         title: const Text('APPCLASE'),
         actions: [
           const ThemeButton(),
+          const NotificationsButton(),
           IconButton(
             tooltip: 'Cerrar sesión',
             icon: const Icon(Icons.logout_rounded),

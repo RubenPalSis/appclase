@@ -7,6 +7,7 @@ import 'core/api.dart';
 import 'core/widgets.dart';
 import 'features/access/access.dart';
 import 'features/classes/class_page.dart';
+import 'features/notifications/notifications_page.dart';
 import 'features/organizations/organization_page.dart';
 
 void main() {
@@ -19,6 +20,10 @@ final router = GoRouter(
     GoRoute(
       path: '/',
       builder: (_, _) => const SessionGate(child: HomePage()),
+    ),
+    GoRoute(
+      path: '/avisos',
+      builder: (_, _) => const SessionGate(child: NotificationsPage()),
     ),
     GoRoute(
       path: '/centros/:id',
