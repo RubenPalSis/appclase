@@ -32,3 +32,8 @@
 .field input[type="color"] { width: 64px; min-height: 42px; padding: 5px; cursor: pointer; }
 .toolbar-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 @media (max-width: 820px) { .agenda-layout { grid-template-columns: minmax(0, 1fr); } }
+
+.mini-day-outside {
+  background: var(--surface-2);
+  color: color-mix(in srgb, var(--muted) 70%, var(--surface));
+}

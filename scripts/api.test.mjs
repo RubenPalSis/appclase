@@ -34,6 +34,8 @@ async function fixture(t) {
   `);
   sqlite.exec(await readFile(new URL('../migrations/0011_platform_access.sql', import.meta.url), 'utf8'));
   sqlite.exec(await readFile(new URL('../migrations/0012_subject_colors.sql', import.meta.url), 'utf8'));
+  sqlite.exec(await readFile(new URL('../migrations/0013_submission_attachments.sql', import.meta.url), 'utf8'));
+  sqlite.exec(await readFile(new URL('../migrations/0014_password_resets.sql', import.meta.url), 'utf8'));
   sqlite.exec("INSERT INTO platform_administrators VALUES ('admin')");
   const sessions = new Map();
   for (const [index, user] of ['teacher','student','outside','other','admin'].entries()) {
@@ -148,6 +150,15 @@ test('entregas, notas privadas y asistencia individual', async t => {
   const [{id}] = (await call(route+'/assignments','student')).data;
   const endpoint = route+'/assignments/'+id;
   assert.equal((await call(endpoint+'/deliver','student',{body:'Respuesta privada'})).status, 200);
+  const document = new TextEncoder().encode('%PDF-1.7');
+  const upload = endpoint+'/attachment?name=respuesta.pdf';
+  assert.equal((await call(upload,'teacher',document)).status, 403);
+  const {data:attachment} = await call(upload,'student',document);
+  assert.equal((await call(upload,'student',document)).status, 409);
+  const download = endpoint+'/attachment/'+attachment.id;
+  assert.deepEqual((await call(download,'teacher')).data, document);
+  assert.equal((await call(download,'other')).status, 404);
+  assert.equal((await call(endpoint,'student')).data.task.attachment_id, attachment.id);
   assert.equal((await call(endpoint,'outside')).status, 404);
   assert.equal((await call(endpoint,'student')).data.task.answer, 'Respuesta privada');
   const otherDetail = (await call(endpoint,'other')).data;
@@ -329,6 +340,51 @@ test('panel de próximas entregas respeta pertenencia y entregas realizadas', as
   await call(route+'/'+id+'/deliver','student',{body:'Respuesta'});
   assert.deepEqual((await call('/dashboard/upcoming','student')).data, []);
   assert.equal((await call('/dashboard/upcoming','teacher')).data.length, 1);
+});
+
+test('agenda semanal incluye eventos activos y limita el horizonte', async t => {
+  const call = await fixture(t);
+  const route = '/classes/course/calendar';
+  const time = now();
+  for (const [title, delay] of [['Esta semana',60],['La próxima semana',8*86400]]) {
+    assert.equal((await call(route,'teacher',{title,body:'',start:time+delay,finish:time+delay+120})).status,200);
+  }
+  assert.deepEqual((await call('/dashboard/upcoming','student')).data, []);
+  assert.deepEqual((await call('/dashboard/upcoming?period=week','student')).data.map(row => row.title), ['Esta semana']);
+  assert.deepEqual((await call('/dashboard/upcoming?period=week','outside')).data, []);
+});
+
+test('importación inscribe solo a alumnos activos del centro y admite reintentos', async t => {
+  const call = await fixture(t);
+  call.sqlite.prepare("DELETE FROM class_students WHERE class_id='course' AND user_id='student'").run();
+  const endpoint = '/classes/course/students/import';
+  const request = {emails:[' S@example.com ','s@example.com','x@example.com','t@example.com']};
+  assert.equal((await call(endpoint,'other',request)).status,403);
+  assert.equal((await call(endpoint,'outside',request)).status,404);
+  assert.deepEqual((await call(endpoint,'teacher',request)).data, {
+    processed:3, unavailable:['x@example.com','t@example.com'],
+  });
+  assert.deepEqual((await call(endpoint,'teacher',request)).data.unavailable, ['x@example.com','t@example.com']);
+  assert.equal((await call('/classes/course','student')).status,200);
+});
+
+test('la recuperación consume enlaces una sola vez y revoca sesiones', async t => {
+  const call = await fixture(t);
+  const account = {name:'Cuenta local',email:'recovery@example.com',password:'contraseña anterior'};
+  assert.equal((await call('/auth/register',null,account)).status,204);
+  const {id} = call.sqlite.prepare('SELECT id FROM users WHERE email=?').get(account.email);
+  const reset = 'b'.repeat(64);
+  const expired = 'c'.repeat(64);
+  const save = call.sqlite.prepare('INSERT INTO password_resets VALUES (?,?,?)');
+  save.run(await hash(expired), id, now()-60);
+  assert.equal((await call('/auth/reset',null,{token:expired,password:'nueva contraseña válida'})).status,400);
+  call.sqlite.prepare('DELETE FROM password_resets WHERE user_id=?').run(id);
+  save.run(await hash(reset), id, now()+60);
+  assert.equal((await call('/auth/reset',null,{token:reset,password:'nueva contraseña válida'})).status,200);
+  assert.equal(call.sqlite.prepare('SELECT COUNT(*) AS total FROM sessions WHERE user_id=?').get(id).total,0);
+  assert.equal((await call('/auth/reset',null,{token:reset,password:'nueva contraseña válida'})).status,400);
+  assert.equal((await call('/auth/login',null,account)).status,401);
+  assert.equal((await call('/auth/login',null,{...account,password:'nueva contraseña válida'})).status,204);
 });
 
 test('temario jerárquico, búsqueda y permisos de escritura', async t => {

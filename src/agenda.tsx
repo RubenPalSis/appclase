@@ -78,6 +78,7 @@ export function AgendaCalendar({ renderRows }: { renderRows: (rows: Row[]) => Re
   const rows = result?.month === month ? result.rows.filter(row => !excluded.has(row.class_id) && (kind === 'all' || row.kind === kind)) : [];
   const dayCount = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
   const leadingDays = (month.getDay() + 6) % 7;
+  const trailingDays = (7 - (leadingDays + dayCount) % 7) % 7;
   const days = Array.from({ length: dayCount }, (_, i) => {
     const date = new Date(month.getFullYear(), month.getMonth(), i + 1);
     const next = new Date(month.getFullYear(), month.getMonth(), i + 2);
@@ -112,7 +113,9 @@ export function AgendaCalendar({ renderRows }: { renderRows: (rows: Row[]) => Re
         </div>
         <div className="mini-calendar">
           {weekdays.map(label => <span className="day-label" key={label}>{label}</span>)}
-          {Array.from({ length: leadingDays }, (_, i) => <span key={i} aria-hidden="true"/>)}
+          {Array.from({ length: leadingDays }, (_, i) => <span className="mini-day mini-day-outside" key={'prev-' + i} aria-hidden="true">
+            {new Date(month.getFullYear(), month.getMonth(), i - leadingDays + 1).getDate()}
+          </span>)}
           {days.map(({ date, subjects }) => {
             const number = date.getDate();
             const label = dayLabel.format(date);
@@ -132,6 +135,7 @@ export function AgendaCalendar({ renderRows }: { renderRows: (rows: Row[]) => Re
               </button>
             );
           })}
+          {Array.from({ length: trailingDays }, (_, i) => <span className="mini-day mini-day-outside" key={'next-' + i} aria-hidden="true">{i + 1}</span>)}
         </div>
         <label className="field mt-4">
           <span>Tipo de actividad</span>

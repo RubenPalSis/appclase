@@ -8,7 +8,7 @@ La aplicación ya tiene acceso por correo y contraseña, alta de cuentas, activa
 
 La API valida permisos en el servidor; ocultar una opción en la interfaz no concede ni revoca acceso. Las rutas y tablas existentes de D1 se conservan durante esta migración.
 
-El producto aún requiere trabajo antes de comercializarlo con centros reales: completar controles operativos de calificación y asistencia, formularios de examen y entrega, verificación y recuperación de correo, política/retención de datos, pruebas de accesibilidad y revisión de privacidad aplicable a cada centro. Los archivos de materiales requieren configurar un bucket R2 privado; el binding no está activado en este repositorio. No se deben cargar datos reales de menores hasta completar las revisiones del centro y de privacidad.
+El producto aún requiere trabajo antes de comercializarlo con centros reales: activar y probar los servicios de correo y documentos en producción, definir la retención de datos y completar las pruebas de accesibilidad y la revisión de privacidad aplicable a cada centro. Los archivos de materiales requieren configurar un bucket R2 privado; el binding no está activado en este repositorio. No se deben cargar datos reales de menores hasta completar las revisiones del centro y de privacidad.
 
 ## Arquitectura
 
@@ -103,3 +103,12 @@ Pages, Workers y D1 pueden servir un piloto dentro de las cuotas gratuitas vigen
 - El primer acceso docente falla: verifica correo, contraseña temporal, código del centro y asociación activa.
 - Una publicación no aparece tras desplegar: actualiza el service worker cerrando pestañas APPCLASE antiguas y vuelve a abrir la web.
 - Error de esquema D1: aplica las migraciones al mismo binding que está configurado en el proyecto Pages.
+
+### Correo de cuenta
+
+La recuperación de contraseña aparece cuando el entorno de Pages tiene
+`APP_ORIGIN` con el origen público de APPCLASE, `ACCOUNT_EMAIL_FROM` con
+el remitente verificado y `RESEND_API_KEY` como secreto. Estos valores
+son de ejecución y deben configurarse en el entorno de Cloudflare. Prueba
+el flujo con cuentas de prueba antes de habilitarlos para el alumnado.
+Los enlaces caducan a los 30 minutos y se consumen una sola vez.

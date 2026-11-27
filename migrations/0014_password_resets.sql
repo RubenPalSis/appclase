@@ -1,0 +1,5 @@
+CREATE TABLE password_resets (
+  hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+  expires INTEGER NOT NULL
+);

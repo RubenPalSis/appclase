@@ -41,7 +41,7 @@ function equals(a, b) {
   return diff === 0;
 }
 
-async function limit(db, key, maximum, window) {
+export async function limit(db, key, maximum, window) {
   const current = Math.floor(now() / window) * window;
   const row = await first(db, `INSERT INTO login_limits VALUES (?,?,1)
     ON CONFLICT(key) DO UPDATE SET attempts=CASE WHEN window=excluded.window THEN attempts+1 ELSE 1 END,
@@ -149,6 +149,7 @@ export async function changePassword(request, env, user, data) {
   const sessionHash = await hash(cookies(request).appclase_session);
   await db.batch([
     statement(db, 'UPDATE password_credentials SET salt=?,digest=? WHERE user_id=?', salt, digest, user.id),
+    statement(db, "DELETE FROM password_resets WHERE user_id=?", user.id),
     statement(db, 'DELETE FROM sessions WHERE user_id=? AND hash<>?', user.id, sessionHash),
   ]);
   return {};

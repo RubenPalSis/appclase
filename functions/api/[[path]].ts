@@ -1,3 +1,4 @@
+import { completePasswordReset, emailEnabled, requestPasswordReset } from '../../server/account-email.ts';
 import * as platform from '../../server/platform.ts';
 import * as materials from '../../server/materials.ts';
 import { upcoming } from '../../server/dashboard.ts';
@@ -18,7 +19,7 @@ const response = (data, status = 200) => Response.json(data, {
   status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' },
 });
 
-type Env = { DB: any; APP_ORIGIN?: string; DOCUMENTS?: any };
+type Env = { DB: any; APP_ORIGIN?: string; DOCUMENTS?: any; RESEND_API_KEY?: string; ACCOUNT_EMAIL_FROM?: string };
 export async function onRequest({ request, env }: { request: Request; env: Env }) {
   try {
     const url = new URL(request.url);
@@ -30,6 +31,13 @@ export async function onRequest({ request, env }: { request: Request; env: Env }
     }
     if (method === 'POST' && ['/api/auth/login','/api/auth/register'].includes(url.pathname)) {
       return await authenticate(request, env, origin, await jsonBody(request), url.pathname.endsWith('/register'));
+    }
+    if (url.pathname === '/api/auth/options' && method === 'GET') return response({ email: emailEnabled(env) });
+    if (url.pathname === '/api/auth/reset-request' && method === 'POST') {
+      return response(await requestPasswordReset(request, env, (await jsonBody(request)).email));
+    }
+    if (method === 'POST' && url.pathname === '/api/auth/reset') {
+      return response(await completePasswordReset(env, await jsonBody(request)));
     }
     const user = await currentUser(request, env);
     const db = env.DB;
@@ -53,7 +61,7 @@ export async function onRequest({ request, env }: { request: Request; env: Env }
     if (url.pathname === '/api/notifications/preferences') return response(method === 'GET'
       ? await notices.preferences(db, user)
       : await notices.setPreference(db, user, await jsonBody(request)));
-    if (url.pathname === '/api/dashboard/upcoming' && method === 'GET') return response(await upcoming(db, user));
+    if (url.pathname === '/api/dashboard/upcoming' && method === 'GET') return response(await upcoming(db, user, url.searchParams.get('period') === 'week'));
     if (url.pathname === '/api/join' && method === 'POST') return response(await classes.joinClass(db, user, await jsonBody(request)));
     if (url.pathname === '/api/classes') return response(method === 'GET'
       ? await classes.visibleClasses(db, user)
@@ -74,6 +82,9 @@ export async function onRequest({ request, env }: { request: Request; env: Env }
     if (parts[0] !== 'classes' || !parts[1]) throw new HttpError(404, 'Ruta no disponible.');
     const course = await classes.classAccess(db, parts[1], user);
     const section = parts[2];
+    if (section === 'students' && parts.length === 4 && parts[3] === 'import' && method === 'POST') {
+      return response(await classes.importStudents(db, course, user, await jsonBody(request)));
+    }
     if (parts.length === 2 && method === 'GET') return response({ ...course, documents_enabled: Boolean(env.DOCUMENTS) });
     if (section === 'topics' && parts.length === 4 && method === 'POST') {
       return response(await materials.moveTopic(db, course, parts[3], await jsonBody(request)));
@@ -104,7 +115,11 @@ export async function onRequest({ request, env }: { request: Request; env: Env }
       }
     }
     if (parts.length === 4 && section === 'assignments' && method === 'GET') {
-      return response(await learning.assignmentDetail(db, course, user, parts[3]));
+      return response(await learning.assignmentDetail(db, course, user, parts[3], Boolean(env.DOCUMENTS)));
+    }
+    if (section === 'assignments' && parts[4] === 'attachment') {
+      if (parts.length === 5 && method === 'POST') return response(await files.attachSubmission(env, course, user, parts[3], request, url.searchParams.get('name')));
+      if (parts.length === 6 && method === 'GET') return await files.downloadSubmission(env, course, user, parts[3], parts[5]);
     }
     if (parts.length === 5 && section === 'assignments') {
       const [, , , id, action] = parts;
