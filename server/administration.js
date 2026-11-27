@@ -2,7 +2,7 @@ import { audit } from './classes.js';
 import { HttpError, first, list, statement, text } from './security.js';
 
 export async function requireAdmin(db, user, org) {
-  const membership = await first(db, `SELECT o.id,o.name FROM organizations o
+  const membership = await first(db, `SELECT o.id,o.name,o.access_code FROM organizations o
     JOIN memberships m ON m.org_id=o.id
     WHERE o.id=? AND m.user_id=? AND m.role='admin' AND m.active=1`, org, user.id);
   if (!membership) throw new HttpError(404, 'No se encuentra el centro o no tienes permisos.');
