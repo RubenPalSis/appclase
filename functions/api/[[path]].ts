@@ -1,3 +1,4 @@
+import { connectTeacherStorage, storageProfile } from '../../server/teacher-storage.ts';
 import { storageEnabled } from '../../server/storage.ts';
 import * as lessons from '../../server/lessons.ts';
 import { completePasswordReset, emailEnabled, requestPasswordReset } from '../../server/account-email.ts';
@@ -21,7 +22,7 @@ const response = (data, status = 200) => Response.json(data, {
   status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' },
 });
 
-type Env = { DB: any; APP_ORIGIN?: string; DOCUMENTS?: any; SUPABASE_URL?: string; SUPABASE_STORAGE_KEY?: string; SUPABASE_BUCKET?: string; RESEND_API_KEY?: string; ACCOUNT_EMAIL_FROM?: string };
+type Env = { DB: any; APP_ORIGIN?: string; DOCUMENTS?: any; SUPABASE_URL?: string; SUPABASE_STORAGE_KEY?: string; SUPABASE_BUCKET?: string; STORAGE_ENCRYPTION_KEY?: string; RESEND_API_KEY?: string; ACCOUNT_EMAIL_FROM?: string };
 export async function onRequest({ request, env }: { request: Request; env: Env }) {
   try {
     const url = new URL(request.url);
@@ -54,6 +55,8 @@ export async function onRequest({ request, env }: { request: Request; env: Env }
       return response(await changePassword(request, env, user, await jsonBody(request)));
     }
     if (user.must_change) throw new HttpError(403, 'Cambia tu contraseña temporal para continuar.');
+    if (url.pathname === '/api/account/storage') return response(method === 'GET'
+      ? await storageProfile(env,user) : await connectTeacherStorage(env,user,await jsonBody(request)));
     if (url.pathname === '/api/organizations') return response(method === 'GET'
       ? await platform.centers(db, user) : await platform.createCenter(db, user, await jsonBody(request)));
     if (url.pathname === '/api/notifications' && method === 'GET') return response(await notices.notifications(db, user));
@@ -88,7 +91,7 @@ export async function onRequest({ request, env }: { request: Request; env: Env }
     if (section === 'students' && parts.length === 4 && parts[3] === 'import' && method === 'POST') {
       return response(await classes.importStudents(db, course, user, await jsonBody(request)));
     }
-    if (parts.length === 2 && method === 'GET') return response({ ...course, documents_enabled: storageEnabled(env) });
+    if (parts.length === 2 && method === 'GET') return response({ ...course, documents_enabled: await storageEnabled(env, course) });
     if (section === 'topics' && parts.length === 4 && method === 'POST') {
       return response(await materials.moveTopic(db, course, parts[3], await jsonBody(request)));
     }
@@ -118,7 +121,7 @@ export async function onRequest({ request, env }: { request: Request; env: Env }
       }
     }
     if (parts.length === 4 && section === 'assignments' && method === 'GET') {
-      return response(await learning.assignmentDetail(db, course, user, parts[3], storageEnabled(env)));
+      return response(await learning.assignmentDetail(db, course, user, parts[3], await storageEnabled(env, course)));
     }
     if (section === 'assignments' && parts[4] === 'attachment') {
       if (parts.length === 5 && method === 'POST') return response(await files.attachSubmission(env, course, user, parts[3], request, url.searchParams.get('name')));

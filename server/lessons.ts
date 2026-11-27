@@ -15,7 +15,7 @@ export function lessons(db, course) {
 
 export async function createLesson(env, course, request, params) {
   requireStaff(course);
-  const storage = bucket(env);
+  const storage = bucket(env, course);
   const title = text(params.get('title'), 160);
   const description = text(params.get('description') ?? '', 1000, 0);
   const opens = integer(Number(params.get('opens')), 0, 4102444800);
@@ -51,8 +51,8 @@ export async function lessonFile(env, course, id, request) {
   }
   if (course.role === 'student' && file.opens > timestamp) throw new HttpError(423, 'Este contenido todavía está bloqueado.');
   const key = course.id + '/lessons/' + file.id;
-  if (!file.mime.startsWith('video/')) return downloadObject(env, key, file.filename);
-  const storage = bucket(env);
+  if (!file.mime.startsWith('video/')) return downloadObject(env, course, key, file.filename);
+  const storage = bucket(env, course);
   const range = request.headers.get('range');
   const headers = new Headers({
     'Cache-Control': 'private, no-store', 'Content-Type': file.mime,

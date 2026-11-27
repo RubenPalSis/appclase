@@ -122,3 +122,43 @@ En el aula, `Videoclases y PDF` admite PDF de hasta 16 MB y vídeos MP4 o WebM d
 - Guarda las exportaciones de D1 y las copias de los objetos del bucket en almacenamiento privado cifrado, con acceso y retención controlados. Conserva las claves de objeto del bucket y un inventario con tamaño y suma SHA-256. Evita guardar copias de datos reales en GitHub Actions o en el repositorio.
 - Verifica las copias en una D1 y un bucket de ensayo independientes. Comprueba que cada metadato restaurado apunta a un archivo recuperado y conserva el mismo contenido. Restaura producción únicamente como parte de una recuperación autorizada.
 - `bash scripts/restore-drill.sh` repite en CI un ensayo con datos ficticios, el esquema de D1 en SQLite y almacenes R2 locales independientes. No usa credenciales ni datos de producción.
+
+### Almacenamiento personal del profesor
+
+APPCLASE conserva en D1 los usuarios, centros, clases, notas, permisos y metadatos de los archivos.
+Los profesores pueden crear y controlar su propio proyecto Supabase Free. La conexión del profesor titular
+se utiliza para las nuevas subidas de sus clases, incluidos los adjuntos que entrega el alumnado. Los archivos
+ya subidos conservan su conexión original. Si cambia la contraseña de una conexión anterior, vuelve a vincular
+el mismo proyecto y bucket con las credenciales nuevas.
+
+1. Crea un proyecto Free de Supabase. En **Storage** crea un bucket privado llamado `appclase-documentos`.
+2. En **Authentication → Users**, crea un usuario técnico con una contraseña exclusiva de al menos
+   12 caracteres. Confirma ese usuario desde el panel y copia su UUID. Esa cuenta existe solo en Supabase
+   y no requiere usar la contraseña personal del profesor.
+3. Desde el editor SQL de ese proyecto, ejecuta las políticas siguientes. Sustituye
+   `00000000-0000-0000-0000-000000000000` por el UUID técnico. Si elegiste otro nombre de bucket,
+   cámbialo también en el SQL.
+
+```sql
+CREATE POLICY "appclase technical bucket"
+ON storage.buckets FOR SELECT TO authenticated
+USING (id = 'appclase-documentos'
+  AND (SELECT auth.uid()) = '00000000-0000-0000-0000-000000000000'::uuid);
+
+CREATE POLICY "appclase technical objects"
+ON storage.objects FOR ALL TO authenticated
+USING (bucket_id = 'appclase-documentos'
+  AND (SELECT auth.uid()) = '00000000-0000-0000-0000-000000000000'::uuid)
+WITH CHECK (bucket_id = 'appclase-documentos'
+  AND (SELECT auth.uid()) = '00000000-0000-0000-0000-000000000000'::uuid);
+```
+
+4. En **APPCLASE → Mi cuenta → Almacenamiento de mis clases**, introduce la URL del proyecto, el nombre
+   del bucket, la clave publicable `sb_publishable_…`, el correo y la contraseña técnicos. El servidor
+   prueba la subida, lectura privada y borrado antes de guardar la conexión.
+
+Para habilitar el formulario en Cloudflare Pages, configura `STORAGE_ENCRYPTION_KEY` como secreto de
+producción. Debe contener 32 bytes aleatorios codificados en base64. Conserva una copia segura de esa
+clave antes de desplegar: hace falta para recuperar las conexiones cifradas después de restaurar D1.
+La aplicación reserva hasta 800 MB de subidas por proyecto conectado y conserva la opción de un
+almacenamiento global para clases sin conexión personal.

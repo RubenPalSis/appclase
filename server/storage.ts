@@ -1,7 +1,7 @@
-import { HttpError, run } from './security.ts';
+import { HttpError, first, run } from './security.ts';
+import { authenticateStorage, teacherConnection, type TeacherStorageEnv } from './teacher-storage.ts';
 
-type StorageEnv = {
-  DB: any;
+type StorageEnv = TeacherStorageEnv & {
   DOCUMENTS?: any;
   SUPABASE_URL?: string;
   SUPABASE_STORAGE_KEY?: string;
@@ -22,32 +22,66 @@ function configuration(env: StorageEnv) {
   return { root: SUPABASE_URL.replace(/\/$/, '') + '/storage/v1/object', name: SUPABASE_BUCKET, headers };
 }
 
-export function storageEnabled(env: StorageEnv) {
-  return Boolean(configuration(env) || env.DOCUMENTS);
+type Course = { teacher_id: string; id: string };
+type StoreConfig = { root: string; name: string; headers: Headers; connectionId?: string; scope?: string };
+
+export async function storageEnabled(env: StorageEnv, course: Course) {
+  if (configuration(env) || env.DOCUMENTS) return true;
+  const personal = await teacherConnection(env.DB, course.teacher_id);
+  if (personal && env.STORAGE_ENCRYPTION_KEY) return true;
+  return Boolean(env.STORAGE_ENCRYPTION_KEY && await first(env.DB, `SELECT 1 FROM storage_reservations r
+    JOIN teacher_storage_connections c ON c.id=r.connection_id WHERE r.object_key GLOB ? LIMIT 1`, course.id + '/*'));
 }
 
-export function bucket(env: StorageEnv) {
-  const config = configuration(env);
-  if (!config) {
+export function bucket(env: StorageEnv, course: Course) {
+  async function resolve(key: string, operation: 'put'|'get'|'delete') {
+    const connection = operation === 'put'
+      ? await teacherConnection(env.DB, course.teacher_id)
+      : await first(env.DB, `SELECT c.id,c.origin,c.bucket,c.credential FROM storage_reservations r
+          JOIN teacher_storage_connections c ON c.id=r.connection_id WHERE r.object_key=?`, key);
+    if (connection) {
+      let headers;
+      try { headers = await authenticateStorage(env,connection); }
+      catch { throw new HttpError(503, 'La conexión privada del profesor no está disponible.'); }
+      return supabase(env, {
+        root:connection.origin + '/storage/v1/object',name:connection.bucket,headers,
+        connectionId:connection.id,scope:connection.origin,
+      });
+    }
+    const config = configuration(env);
+    if (config) return supabase(env,config);
     if (env.DOCUMENTS) return env.DOCUMENTS;
     throw new HttpError(503, 'La subida de documentos aún no está habilitada.');
   }
-  const { root, name, headers } = config;
+  return {
+    put: async (key: string, bytes: Uint8Array) => (await resolve(key,'put')).put(key,bytes),
+    get: async (key: string, options?: { range: { offset: number; length: number } }) => (await resolve(key,'get')).get(key,options),
+    delete: async (key: string) => (await resolve(key,'delete')).delete(key),
+  };
+}
+
+function supabase(env: StorageEnv, config: StoreConfig) {
+  const { root, name, headers, connectionId = null, scope = 'global' } = config;
   const objectPath = (key: string) => [name, ...key.split('/')].map(encodeURIComponent).join('/');
   const unavailable = () => new HttpError(503, 'El almacenamiento de archivos no está disponible ahora.');
   async function request(url: string, init: RequestInit) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), init.method === 'POST' ? 90000 : 15000);
     try {
-      return await fetch(url, { ...init, redirect: 'error' });
+      return await fetch(url, { ...init, redirect: 'error', signal:controller.signal });
     } catch {
       throw unavailable();
+    } finally {
+      // Stop timing out once the upstream headers arrive. Video streams can take longer.
+      clearTimeout(timeout);
     }
   }
 
   return {
     async put(key: string, bytes: Uint8Array) {
-      const reserved = await run(env.DB, `INSERT INTO storage_reservations (object_key,bytes)
-        SELECT ?,? WHERE (SELECT COALESCE(SUM(bytes),0) FROM storage_reservations)+?<=?`,
-        key, bytes.byteLength, bytes.byteLength, capacity);
+      const reserved = await run(env.DB, `INSERT INTO storage_reservations (object_key,bytes,connection_id,quota_scope)
+        SELECT ?,?,?,? WHERE (SELECT COALESCE(SUM(bytes),0) FROM storage_reservations WHERE quota_scope=?)+?<=?`,
+        key, bytes.byteLength, connectionId, scope, scope, bytes.byteLength, capacity);
       if (!reserved.meta.changes) throw new HttpError(409, 'Se ha alcanzado el límite de almacenamiento gratuito.');
       const uploadHeaders = new Headers(headers);
       uploadHeaders.set('Content-Type', 'application/octet-stream');
