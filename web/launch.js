@@ -10,6 +10,14 @@ window.addEventListener('flutter-first-frame', () => {
   loading.remove();
 }, { once: true });
 if ('serviceWorker' in navigator) {
+  let previous = navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (previous) {
+      window.location.reload();
+      return;
+    }
+    previous = navigator.serviceWorker.controller;
+  });
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   }, { once: true });

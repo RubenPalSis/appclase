@@ -24,6 +24,7 @@ test('la PWA conserva el shell sin conexión y excluye API y descargas', async (
   const events = {};
   const shell = new Response('APPCLASE');
   let all;
+  let activated = false;
   let pending;
   const cache = {
     addAll: async requests => { all = requests.map(item => item.url); },
@@ -36,10 +37,11 @@ test('la PWA conserva el shell sin conexión y excluye API y descargas', async (
     },
     fetch() { throw new Error('Desconectado'); },
     caches: { open: async () => cache },
-    self: { location: { origin }, addEventListener: (name, handle) => { events[name] = handle; } },
+    self: { skipWaiting: async () => { activated = true; }, location: { origin }, addEventListener: (name, handle) => { events[name] = handle; } },
   });
   events.install({ waitUntil: promise => { pending = promise; } });
   await pending;
+  assert.equal(activated, true);
   assert.ok(all.includes('/'));
   assert.ok(all.includes('/main.dart.js'));
   assert.ok(!all.includes('/.last_build_id'));
