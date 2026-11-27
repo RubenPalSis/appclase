@@ -1,0 +1,151 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { DatabaseSync } from 'node:sqlite';
+import { test } from 'node:test';
+import { onRequest } from '../functions/api/[[path]].js';
+import { hash, now } from '../server/security.js';
+
+const origin = 'https://appclase.example';
+const migration = await readFile(new URL('../migrations/0001_initial.sql', import.meta.url), 'utf8');
+
+async function fixture(t) {
+  const sqlite = new DatabaseSync(':memory:');
+  t.after(() => sqlite.close());
+  sqlite.exec(migration);
+  sqlite.exec(await readFile(new URL("../migrations/0002_exams.sql", import.meta.url), "utf8"));
+  sqlite.exec(`
+    INSERT INTO users VALUES ('teacher','t@example.com','Profe'),('student','s@example.com','Alumna'),
+      ('outside','x@example.com','Externo'),('other','o@example.com','Otro alumno');
+    INSERT INTO organizations VALUES ('center','Centro'),('different','Otro centro');
+    INSERT INTO memberships VALUES ('center','teacher','teacher'),('center','student','student'),
+      ('center','other','student'),('different','outside','teacher');
+    INSERT INTO classes(id,org_id,teacher_id,name,subject,description,academic_year)
+      VALUES ('course','center','teacher','Clase','Materia','','2026');
+    INSERT INTO class_students VALUES ('course','student'),('course','other');
+  `);
+  const sessions = new Map();
+  for (const [index, user] of ['teacher','student','outside','other'].entries()) {
+    const value = String(index + 1).repeat(64);
+    sqlite.prepare('INSERT INTO sessions VALUES (?,?,?)').run(await hash(value), user, now() + 1000);
+    sessions.set(user, value);
+  }
+  const env = {
+    APP_ORIGIN: origin,
+    DB: {
+      prepare(sql) {
+        return { bind(...values) {
+          const stmt = sqlite.prepare(sql);
+          return {
+            first: () => stmt.get(...values) ?? null,
+            all: () => ({ results: stmt.all(...values) }),
+            run: () => ({ meta: stmt.run(...values) }),
+          };
+        } };
+      },
+      batch(commands) {
+        sqlite.exec('BEGIN');
+        try {
+          const result = commands.map(command => command.run());
+          sqlite.exec('COMMIT');
+          return result;
+        } catch (error) {
+          sqlite.exec('ROLLBACK');
+          throw error;
+        }
+      },
+    },
+  };
+  return async (path, user, payload, from = origin) => {
+    const headers = {};
+    if (user) headers.Cookie = 'appclase_session=' + sessions.get(user);
+    if (payload !== undefined) {
+      headers.Origin = from;
+      headers['Content-Type'] = 'application/json';
+    }
+    const result = await onRequest({
+      request: new Request(origin + '/api' + path, {
+        method: payload === undefined ? 'GET' : 'POST',
+        headers,
+        body: payload === undefined ? undefined : JSON.stringify(payload),
+      }),
+      env,
+    });
+    return { status: result.status, data: result.status === 204 ? null : await result.json() };
+  };
+}
+
+test('autenticación, cierre de sesión y origen de escrituras', async t => {
+  const call = await fixture(t);
+  assert.equal((await call('/me')).status, 401);
+  assert.equal((await call('/me','student')).data.user.name, 'Alumna');
+  assert.equal((await call('/logout','student',{},'https://other.example')).status, 403);
+  assert.equal((await call('/logout','student',{})).status, 204);
+  assert.equal((await call('/me','student')).status, 401);
+});
+
+test('aislamiento entre centros y prohibición de cambios para alumnos', async t => {
+  const call = await fixture(t);
+  assert.deepEqual((await call('/classes','outside')).data, []);
+  assert.equal((await call('/classes/course/posts','outside')).status, 404);
+  assert.equal((await call('/classes/course/posts','student',{body:'Anuncio'})).status, 403);
+  assert.equal((await call('/classes','student',{org_id:'center',role:'admin'})).status, 403);
+  assert.equal((await call('/classes/course/posts','teacher',{body:'Anuncio'})).status, 200);
+  assert.equal((await call('/classes/course/posts','student')).data[0].body, 'Anuncio');
+  assert.equal((await call('/classes/course/materials','teacher',{title:'Prueba',url:'javascript:alert(1)'})).status, 400);
+});
+
+test('invitaciones, rotación y archivo', async t => {
+  const call = await fixture(t);
+  const old = (await call('/classes/course/invite','teacher',{})).data.code;
+  const code = (await call('/classes/course/invite','teacher',{})).data.code;
+  assert.notEqual(old, code);
+  assert.equal((await call('/join','outside',{code:old})).status, 404);
+  assert.equal((await call('/join','outside',{code,role:'admin'})).status, 200);
+  assert.equal((await call('/join','outside',{code})).status, 200);
+  assert.equal((await call('/classes/course','outside')).data.role, 'student');
+  assert.equal((await call('/classes/course/archive','teacher',{archived:true})).status, 200);
+  assert.equal((await call('/join','outside',{code})).status, 404);
+  assert.equal((await call('/classes/course/posts','teacher',{body:'Cerrado'})).status, 409);
+});
+
+test('entregas, notas privadas y asistencia individual', async t => {
+  const call = await fixture(t);
+  const route = '/classes/course';
+  assert.equal((await call(route+'/assignments','teacher',{
+    title:'Ejercicio',body:'Describe el problema',due:now()+600,points:10,allow_late:false,
+  })).status, 200);
+  const [{id}] = (await call(route+'/assignments','student')).data;
+  const endpoint = route+'/assignments/'+id;
+  assert.equal((await call(endpoint+'/deliver','student',{body:'Respuesta privada'})).status, 200);
+  assert.equal((await call(endpoint+'/reviews','other')).status, 403);
+  assert.equal((await call(endpoint+'/reviews','teacher',{user_id:'student',score:11,feedback:''})).status, 400);
+  assert.equal((await call(endpoint+'/reviews','teacher',{user_id:'student',score:9,feedback:'Buen trabajo'})).status, 200);
+  assert.equal((await call(endpoint+'/deliver','student',{body:'Cambios'})).status, 409);
+  assert.equal((await call(route+'/assignments','student')).data[0].score, 9);
+  assert.equal((await call(route+'/assignments','other')).data[0].answer, null);
+  assert.equal((await call(route+'/attendance','teacher',{user_id:'student',day:'2026-02-30',notes:'',status:'late'})).status, 400);
+  assert.equal((await call(route+'/attendance','teacher',{user_id:'student',day:'2026-02-28',notes:'Privado',status:'late'})).status, 200);
+  assert.equal((await call(route+'/attendance','student')).data[0].notes, 'Privado');
+  assert.deepEqual((await call(route+'/attendance','other')).data, []);
+});
+
+test('exámenes temporizados, intentos y respuestas correctas solo en el servidor', async t => {
+  const call = await fixture(t);
+  const route = '/classes/course/exams';
+  const questions = [{prompt:'¿Cuánto es dos más dos?', options:['Tres','Cuatro'], correct:1}];
+  const exam = {title:'Matemáticas', opens:now()-1, closes:now()+600, duration:60, max_attempts:1, questions};
+  assert.equal((await call(route,'student',exam)).status, 403);
+  assert.equal((await call(route,'teacher',exam)).status, 200);
+  const [{id}] = (await call(route,'student')).data;
+  const endpoint = route+'/'+id;
+  const {data: attempt} = await call(endpoint+'/start','student',{});
+  assert.equal(attempt.questions[0].correct, undefined);
+  assert.equal((await call(endpoint+'/start','student',{})).data.id, attempt.id);
+  assert.equal((await call(endpoint+'/'+attempt.id,'other',{answers:{0:1},submit:true})).status, 409);
+  assert.equal((await call(endpoint+'/'+attempt.id,'student',{answers:{0:1},submit:false})).status, 200);
+  assert.equal((await call(endpoint+'/start','student',{})).data.answers[0], 1);
+  assert.equal((await call(endpoint+'/'+attempt.id,'student',{answers:{0:1},submit:true})).status, 200);
+  assert.equal((await call(endpoint+'/start','student',{})).status, 409);
+  assert.equal((await call(endpoint+'/attempts','student')).data[0].score, null);
+  assert.equal((await call(endpoint+'/attempts','teacher')).data[0].score, 1);
+});

@@ -1,0 +1,12 @@
+
+# Credenciales locales
+secretos.env
+.dev.vars*
+.wrangler/
+node_modules/
+.dart_tool/
+.flutter-plugins-dependencies
+build/
+.idea/
+*.iml
+coverage/
