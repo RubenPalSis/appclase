@@ -112,3 +112,5 @@ el remitente verificado y `RESEND_API_KEY` como secreto. Estos valores
 son de ejecución y deben configurarse en el entorno de Cloudflare. Prueba
 el flujo con cuentas de prueba antes de habilitarlos para el alumnado.
 Los enlaces caducan a los 30 minutos y se consumen una sola vez.
+
+En el aula, `Videoclases y PDF` admite PDF de hasta 16 MB y vídeos MP4 o WebM de hasta 48 MB con el bucket `DOCUMENTS` activo. Los vídeos se sirven con peticiones por rangos. El profesorado puede mostrar las videoclases, PDF y exámenes en Agenda con un candado u ocultarlos hasta la apertura. La API aplica estas reglas también a las descargas directas. La pestaña Mensajes conecta de forma privada al profesor responsable con cada alumno de la clase.

@@ -36,6 +36,7 @@ async function fixture(t) {
   sqlite.exec(await readFile(new URL('../migrations/0012_subject_colors.sql', import.meta.url), 'utf8'));
   sqlite.exec(await readFile(new URL('../migrations/0013_submission_attachments.sql', import.meta.url), 'utf8'));
   sqlite.exec(await readFile(new URL('../migrations/0014_password_resets.sql', import.meta.url), 'utf8'));
+  sqlite.exec(await readFile(new URL('../migrations/0015_scheduled_lessons.sql', import.meta.url), 'utf8'));
   sqlite.exec("INSERT INTO platform_administrators VALUES ('admin')");
   const sessions = new Map();
   for (const [index, user] of ['teacher','student','outside','other','admin'].entries()) {
@@ -47,7 +48,7 @@ async function fixture(t) {
   const env = {
     DOCUMENTS: {
       put: (key, value) => objects.set(key, value),
-      get: key => objects.has(key) ? {body:objects.get(key)} : null,
+      get: (key, options) => objects.has(key) ? {body:options?.range ? objects.get(key).slice(options.range.offset, options.range.offset + options.range.length) : objects.get(key)} : null,
       delete: key => objects.delete(key),
     },
     APP_ORIGIN: origin,
@@ -75,9 +76,9 @@ async function fixture(t) {
       },
     },
   };
-  const call = async (path, user, payload, from = origin) => {
+  const call = async (path, user, payload, from = origin, extraHeaders = {}) => {
     const raw = payload instanceof Uint8Array;
-    const headers = {};
+    const headers = { ...extraHeaders };
     if (user) headers.Cookie = 'appclase_session=' + sessions.get(user);
     if (payload !== undefined) {
       headers.Origin = from;
@@ -91,7 +92,7 @@ async function fixture(t) {
       }),
       env,
     });
-    return { cookie: result.headers.get('set-cookie'), status: result.status, data: result.status === 204 ? null : result.headers.get('content-type')?.startsWith('text/') ? await result.text() : result.headers.has('content-disposition') ? new Uint8Array(await result.arrayBuffer()) : await result.json() };
+    return { headers: result.headers, cookie: result.headers.get('set-cookie'), status: result.status, data: [204,416].includes(result.status) ? null : result.headers.get('content-type')?.startsWith('text/') ? await result.text() : (result.headers.has('content-disposition') || result.headers.get('content-type')?.startsWith('video/')) ? new Uint8Array(await result.arrayBuffer()) : await result.json() };
   };
   call.sqlite = sqlite;
   return call;
@@ -200,6 +201,61 @@ test('exámenes temporizados, intentos y respuestas correctas solo en el servido
   assert.equal((await call(endpoint+'/start','student',{})).status, 409);
   assert.equal((await call(endpoint+'/attempts','student')).data[0].score, null);
   assert.equal((await call(endpoint+'/attempts','teacher')).data[0].score, 1);
+});
+
+test('los exámenes ocultos no aparecen en Agenda y los visibles se abren a su hora', async t => {
+  const call = await fixture(t);
+  const path = '/classes/course';
+  const time = now();
+  const exam = {title:'Examen programado',opens:time+60,closes:time+600,duration:60,max_attempts:1,
+    questions:[{prompt:'Pregunta',options:['A','B'],correct:1}]};
+  await call(path+'/exams','teacher',{...exam,hidden_until_open:true});
+  const [hidden] = (await call(path+'/exams','teacher')).data;
+  const range = '?from='+time+'&until='+(time+3600);
+  assert.deepEqual((await call(path+'/exams','student')).data, []);
+  assert.deepEqual((await call(path+'/calendar'+range,'student')).data, []);
+  assert.deepEqual((await call('/dashboard/upcoming?period=week','student')).data, []);
+  const endpoint = path+'/exams/'+hidden.id;
+  assert.equal((await call(endpoint+'/start','student',{})).status,404);
+  assert.equal((await call(endpoint+'/schedule','teacher',{opens:time+60,closes:time+600,hidden_until_open:false})).status,200);
+  assert.equal((await call(path+'/calendar'+range,'student')).data[0].locked,1);
+  assert.equal((await call(endpoint+'/attempts','student')).status,423);
+  assert.equal((await call(endpoint+'/start','student',{})).status,409);
+  assert.equal((await call(endpoint+'/schedule','teacher',{opens:time-1,closes:time+600,hidden_until_open:false})).status,200);
+  assert.equal((await call(endpoint+'/start','student',{})).status,200);
+  assert.equal((await call(endpoint+'/schedule','teacher',{opens:time+60,closes:time+600,hidden_until_open:false})).status,409);
+});
+
+test('videoclases y PDF programados protegen metadatos y descarga', async t => {
+  const call = await fixture(t);
+  const path = '/classes/course';
+  const time = now();
+  const bytes = new TextEncoder().encode('%PDF-1.7');
+  const upload = path+'/lessons?title=Lectura&name=lectura.pdf&description=Contenido&hidden=1&opens='+(time+60);
+  assert.equal((await call(upload,'student',bytes)).status,403);
+  const result = await call(upload,'teacher',bytes);
+  assert.equal(result.status,200);
+  const endpoint = path+'/lessons/'+result.data.id;
+  assert.deepEqual((await call(path+'/lessons','student')).data, []);
+  assert.equal((await call(endpoint,'student')).status,404);
+  assert.equal((await call(endpoint,'teacher')).status,200);
+  assert.equal((await call(endpoint,'teacher',{opens:time+60,hidden_until_open:false})).status,200);
+  const [locked] = (await call(path+'/lessons','student')).data;
+  assert.equal(locked.locked,1);
+  assert.equal(locked.filename,null);
+  assert.equal(locked.description,null);
+  assert.equal((await call(endpoint,'student')).status,423);
+  assert.equal((await call(endpoint,'teacher',{opens:time-1,hidden_until_open:false})).status,200);
+  assert.deepEqual((await call(endpoint,'student')).data,bytes);
+  assert.equal((await call(endpoint,'outside')).status,404);
+  const mp4 = Uint8Array.of(0,0,0,12,0x66,0x74,0x79,0x70,0,1,2,3);
+  const video = await call(path+'/lessons?title=Vídeo&name=clase.mp4&opens='+(time-1),'teacher',mp4);
+  assert.equal(video.status,200);
+  const videoPath = path+'/lessons/'+video.data.id;
+  const chunk = await call(videoPath,'student',undefined,origin,{ Range:'bytes=4-7' });
+  assert.equal(chunk.status,206);
+  assert.equal(chunk.headers.get('content-range'),'bytes 4-7/12');
+  assert.deepEqual(chunk.data,mp4.slice(4,8));
 });
 
 test('gestión de usuarios, revocación sin reingreso y auditoría por centro', async t => {

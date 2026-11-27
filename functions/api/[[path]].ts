@@ -1,3 +1,4 @@
+import * as lessons from '../../server/lessons.ts';
 import { completePasswordReset, emailEnabled, requestPasswordReset } from '../../server/account-email.ts';
 import * as platform from '../../server/platform.ts';
 import * as materials from '../../server/materials.ts';
@@ -127,9 +128,16 @@ export async function onRequest({ request, env }: { request: Request; env: Env }
       if (action === 'reviews' && method === 'GET') return response(await learning.reviews(db, course, id));
       if (action === 'reviews' && method === 'POST') return response(await learning.grade(db, course, id, await jsonBody(request)));
     }
+    if (section === 'lessons') {
+      if (parts.length === 3 && method === 'GET') return response(await lessons.lessons(db, course));
+      if (parts.length === 3 && method === 'POST') return response(await lessons.createLesson(env, course, request, url.searchParams));
+      if (parts.length === 4 && method === 'GET') return await lessons.lessonFile(env, course, parts[3], request);
+      if (parts.length === 4 && method === 'POST') return response(await lessons.scheduleLesson(db, course, parts[3], await jsonBody(request)));
+    }
     if (section === 'exams' && parts.length === 5) {
       const [, , , id, action] = parts;
       if (method === 'GET' && action === 'attempts') return response(await exams.attempts(db, course, user, id));
+      if (method === 'POST' && action === 'schedule') return response(await exams.scheduleExam(db, course, id, await jsonBody(request)));
       if (method === 'POST' && action === 'start') return response(await exams.startExam(db, course, user, id));
       if (method === 'POST') return response(await exams.saveExam(db, course, user, id, action, await jsonBody(request)));
     }

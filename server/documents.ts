@@ -12,7 +12,7 @@ const types = {
   pptx: { mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', signature: [0x50,0x4b,3,4] },
 };
 
-function bucket(env) {
+export function bucket(env) {
   if (!env.DOCUMENTS) throw new HttpError(503, 'La subida de documentos aún no está habilitada.');
   return env.DOCUMENTS;
 }
@@ -20,12 +20,15 @@ function bucket(env) {
 export const documents = (db, course) => list(db, `
   SELECT id,name,mime,bytes,created FROM documents WHERE class_id=? ORDER BY created DESC,id DESC LIMIT 100`, course.id);
 
-async function readDocument(request, originalName) {
+export async function readDocument(request, originalName, lesson = false) {
   const name = text(originalName, 160);
   if (/[\u0000-\u001f\u007f/\\]/u.test(name)) throw new HttpError(400, 'El nombre del documento no es válido.');
-  const type = Object.hasOwn(types, name.toLowerCase().split('.').at(-1)) && types[name.toLowerCase().split('.').at(-1)];
+  const ext = name.toLowerCase().split('.').at(-1);
+  const video = lesson && (ext === 'mp4' || ext === 'webm');
+  const type = video ? { mime: 'video/' + ext, signature: ext === 'mp4' ? [0x66,0x74,0x79,0x70] : [0x1a,0x45,0xdf,0xa3] }
+    : (!lesson || ext === 'pdf') && Object.hasOwn(types, ext) && types[ext];
   if (!type || request.headers.get('content-type') !== 'application/octet-stream') {
-    throw new HttpError(415, 'Selecciona un PDF, una imagen JPG o PNG o un documento de Office compatible.');
+    throw new HttpError(415, lesson ? 'Selecciona un PDF, MP4 o WebM.' : 'Selecciona un PDF, una imagen JPG o PNG o un documento de Office compatible.');
   }
   const reader = request.body?.getReader();
   if (!reader) throw new HttpError(400, 'No se ha recibido el documento.');
@@ -35,9 +38,9 @@ async function readDocument(request, originalName) {
     const { done, value } = await reader.read();
     if (done) break;
     total += value.byteLength;
-    if (total > maxBytes) {
+    if (total > (video ? 48 * 1024 * 1024 : maxBytes)) {
       await reader.cancel();
-      throw new HttpError(413, 'El documento supera los 16 MB.');
+      throw new HttpError(413, video ? 'El vídeo supera los 48 MB.' : 'El documento supera los 16 MB.');
     }
     chunks.push(value);
   }
@@ -47,7 +50,7 @@ async function readDocument(request, originalName) {
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  if (!type.signature.every((byte, index) => bytes[index] === byte)) {
+  if (!type.signature.every((byte, index) => bytes[index + (video && ext === 'mp4' ? 4 : 0)] === byte)) {
     throw new HttpError(415, 'El contenido del documento no coincide con su formato.');
   }
   return { name, bytes, total, mime: type.mime };
@@ -75,7 +78,7 @@ export async function download(env, course, id) {
   return downloadObject(env, course.id + '/' + file.id, file.name);
 }
 
-async function downloadObject(env, key, name) {
+export async function downloadObject(env, key, name) {
   const object = await bucket(env).get(key);
   if (!object) throw new HttpError(404, 'El documento no está disponible.');
   return new Response(object.body, {

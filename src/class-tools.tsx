@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { LockedContent, ScheduleVisibility, scheduleValue } from './class-content';
 import { api, type Row } from './lib/api';
 
 const localDay = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -58,9 +59,10 @@ export function ClassAttendance({ path, staff, archived }: { path: string; staff
   </div>;
 }
 
-export function ClassExams({ path, staff, archived }: { path: string; staff: boolean; archived: boolean }) {
+export function ClassExams({ path, staff, archived, initialId }: { path: string; staff: boolean; archived: boolean; initialId?: string }) {
   const [exams, setExams] = useState<Row[]>([]);
-  const [selected, setSelected] = useState<Row>();
+  const [selectedId, setSelectedId] = useState(initialId);
+  const [scheduling, setScheduling] = useState(false);
   const [attempts, setAttempts] = useState<Row[]>([]);
   const [attempt, setAttempt] = useState<Row>();
   const [questions, setQuestions] = useState(1);
@@ -70,13 +72,22 @@ export function ClassExams({ path, staff, archived }: { path: string; staff: boo
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [clock, setClock] = useState(Date.now);
-  const load = useCallback(async () => setExams(await api.get<Row[]>(path + '/exams')), [path]);
-  useEffect(() => { void load().catch(reason => setError((reason as Error).message)); }, [load]);
+  const load = useCallback(async () => {
+    setExams(await api.get<Row[]>(path + '/exams'));
+    setClock(Date.now());
+  }, [path]);
+  useEffect(() => {
+    void load().catch(reason => setError((reason as Error).message));
+    const timer = window.setInterval(() => { if (!document.hidden) void load().catch(() => {}); }, 15000);
+    return () => window.clearInterval(timer);
+  }, [load]);
   useEffect(() => {
     if (!attempt) return;
     const timer = window.setInterval(() => setClock(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [attempt]);
+  const selected = exams.find(exam => exam.id === selectedId);
+  const locked = Boolean(selected?.locked) && !staff;
   const examPath = selected ? path + '/exams/' + selected.id : '';
   async function act(action: () => Promise<void>) {
     setBusy(true);
@@ -92,6 +103,7 @@ export function ClassExams({ path, staff, archived }: { path: string; staff: boo
     void act(async () => {
       await api.post(path + '/exams', {
         title: form.get('title'), opens: instant(form.get('opens')), closes: instant(form.get('closes')),
+        hidden_until_open: form.get('visibility') === 'hidden',
         duration: Number(form.get('minutes')) * 60, max_attempts: Number(form.get('attempts')),
         questions: Array.from({ length: questions }, (_, index) => ({
           prompt: form.get('question-' + index),
@@ -115,6 +127,7 @@ export function ClassExams({ path, staff, archived }: { path: string; staff: boo
       <label className="field"><span>Cierre</span><input className="ui-input" name="closes" type="datetime-local" required/></label>
       <label className="field"><span>Duración en minutos</span><input className="ui-input" name="minutes" type="number" min={1} max={240} defaultValue={30} required/></label>
       <label className="field"><span>Intentos permitidos</span><input className="ui-input" name="attempts" type="number" min={1} max={10} defaultValue={1} required/></label>
+      <ScheduleVisibility/>
       {Array.from({ length: questions }, (_, index) => <fieldset className="form-stack border-t border-line pt-3" key={index}>
         <legend>Pregunta {index + 1}</legend>
         <label className="field"><span>Enunciado</span><input className="ui-input" name={'question-' + index} required maxLength={600}/></label>
@@ -129,16 +142,41 @@ export function ClassExams({ path, staff, archived }: { path: string; staff: boo
     </form>}
     {!exams.length && <p className="muted">Todavía no hay exámenes publicados.</p>}
     {exams.map(exam => <button className="button soft" key={exam.id} disabled={busy} onClick={() => void act(async () => {
-      setSelected(exam);
+      setSelectedId(exam.id);
+      setScheduling(false);
       setAttempt(undefined);
       setAttempts([]);
-      setAttempts(await api.get<Row[]>(path + '/exams/' + exam.id + '/attempts'));
-    })}>{exam.title} · {dateTime.format(exam.opens * 1000)}</button>)}
+      if (staff || !exam.locked) setAttempts(await api.get<Row[]>(path + '/exams/' + exam.id + '/attempts'));
+    })}>{exam.locked ? '🔒 ' : ''}{exam.title} · {dateTime.format(exam.opens * 1000)}</button>)}
     {selected && <section className="grid gap-3">
       <h3>{selected.title}</h3>
+      {selected.locked ? <LockedContent opens={selected.opens}/> : null}
+      {staff && selected.hidden_until_open === 1 && <p className="muted">Oculto para el alumnado hasta la apertura.</p>}
+      {staff && !archived && <button className="button soft" disabled={busy} onClick={() => setScheduling(!scheduling)}>
+        {scheduling ? 'Cancelar edición' : 'Cambiar horario y visibilidad'}
+      </button>}
+      {scheduling && <form className="form-stack" key={selected.id} onSubmit={event => {
+        event.preventDefault();
+        const form = new FormData(event.currentTarget);
+        void act(async () => {
+          await api.post(examPath + '/schedule', {
+            opens: instant(form.get('opens')), closes: instant(form.get('closes')), hidden_until_open: form.get('visibility') === 'hidden',
+          });
+          setScheduling(false);
+          await load();
+          setNotice('Horario actualizado.');
+        });
+      }}>
+        <label className="field"><span>Apertura</span><input className="ui-input" name="opens" type="datetime-local" required defaultValue={scheduleValue(selected.opens)}/></label>
+        <label className="field"><span>Cierre</span><input className="ui-input" name="closes" type="datetime-local" required defaultValue={scheduleValue(selected.closes)}/></label>
+        <ScheduleVisibility hidden={Boolean(selected.hidden_until_open)}/>
+        <button className="button primary" disabled={busy}>Guardar horario</button>
+      </form>}
       <p className="muted">Cierra el {dateTime.format(selected.closes * 1000)} · {selected.max_attempts} intentos permitidos</p>
+      {!locked && !attempt && <button className="button soft small-button" disabled={busy}
+        onClick={() => void act(async () => setAttempts(await api.get<Row[]>(examPath + '/attempts')))}>Actualizar intentos</button>}
       {attempts.map((row, i) => <p key={row.id ?? i}>{row.name ? row.name + ' · ' : ''}Intento {row.number} · {row.submitted != null ? 'Finalizado' : 'En curso'}{row.score != null ? ' · Aciertos ' + row.score : ''}</p>)}
-      {!staff && !archived && !attempt && <button className="button primary" disabled={busy} onClick={() => void act(async () => {
+      {!staff && !archived && !locked && !attempt && clock / 1000 < selected.closes && <button className="button primary" disabled={busy} onClick={() => void act(async () => {
         const next = await api.post<Row>(examPath + '/start');
         const localNow = Date.now();
         setClock(localNow);

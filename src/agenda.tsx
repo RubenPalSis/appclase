@@ -31,7 +31,8 @@ type CalendarEvent = {
   body: string;
   start: number;
   finish: number;
-  kind: 'assignment' | 'exam' | 'event';
+  kind: 'assignment' | 'exam' | 'event' | 'lesson';
+  locked: number;
 };
 
 export function AgendaCalendar({ renderRows }: { renderRows: (rows: Row[]) => ReactNode }) {
@@ -58,7 +59,7 @@ export function AgendaCalendar({ renderRows }: { renderRows: (rows: Row[]) => Re
     if (!coursesLoaded) return;
     let active = true;
     const query = calendarQuery(month);
-    Promise.allSettled(courses.map(async course => {
+    const reload = () => Promise.allSettled(courses.map(async course => {
       const events = await api.get<CalendarEvent[]>(`/classes/${course.id}/calendar${query}`);
       return events.map(event => ({
         ...event, id: `${course.id}:${event.kind}:${event.id}`, type: event.kind, assignmentId: event.id, date: event.start,
@@ -72,7 +73,9 @@ export function AgendaCalendar({ renderRows }: { renderRows: (rows: Row[]) => Re
         error: results.some(item => item.status === 'rejected') ? 'No se pudieron cargar todas las clases.' : '',
       });
     });
-    return () => { active = false; };
+    void reload();
+    const refresh = window.setInterval(() => { if (!document.hidden) void reload(); }, 60000);
+    return () => { active = false; window.clearInterval(refresh); };
   }, [courses, coursesLoaded, month]);
 
   const rows = result?.month === month ? result.rows.filter(row => !excluded.has(row.class_id) && (kind === 'all' || row.kind === kind)) : [];
@@ -144,6 +147,7 @@ export function AgendaCalendar({ renderRows }: { renderRows: (rows: Row[]) => Re
             <option value="assignment">Tareas</option>
             <option value="exam">Exámenes</option>
             <option value="event">Eventos</option>
+            <option value="lesson">Videoclases y PDF</option>
           </select>
         </label>
         {courses.length > 0 && <div className="agenda-filter">
