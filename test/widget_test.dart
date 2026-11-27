@@ -50,7 +50,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Hola, Docente'), findsOneWidget);
+    expect(find.text('Espacio docente'), findsWidgets);
     expect(find.text('Crear clase'), findsOneWidget);
     expect(find.text('Administrar centro'), findsNothing);
     expect(tester.takeException(), isNull);
