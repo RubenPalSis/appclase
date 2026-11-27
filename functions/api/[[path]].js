@@ -1,3 +1,4 @@
+import * as platform from '../../server/platform.js';
 import * as materials from '../../server/materials.js';
 import { upcoming } from '../../server/dashboard.js';
 import * as board from '../../server/board.js';
@@ -7,7 +8,7 @@ import * as calendar from '../../server/calendar.js';
 import * as grades from '../../server/grades.js';
 import * as files from '../../server/documents.js';
 import * as administration from '../../server/administration.js';
-import { authenticate, currentUser, logout } from '../../server/auth.js';
+import { activatePassword, authenticate, currentUser, logout } from '../../server/auth.js';
 import * as classes from '../../server/classes.js';
 import * as exams from '../../server/exams.js';
 import * as learning from '../../server/learning.js';
@@ -32,7 +33,15 @@ export async function onRequest({ request, env }) {
     const user = await currentUser(request, env);
     const db = env.DB;
     if (url.pathname === '/api/logout' && method === 'POST') return await logout(request, env, origin);
-    if (url.pathname === '/api/me' && method === 'GET') return response({ user, organizations: await classes.organizations(db, user) });
+    if (url.pathname === '/api/me' && method === 'GET') return response(user.must_change ? {user, organizations: []} : {
+      user, organizations: await classes.organizations(db, user), platform_admin: await platform.isPlatformAdmin(db, user),
+    });
+    if (url.pathname === '/api/auth/activate' && method === 'POST') {
+      return response(await activatePassword(request, env, user, await jsonBody(request)));
+    }
+    if (user.must_change) throw new HttpError(403, 'Cambia tu contraseña temporal para continuar.');
+    if (url.pathname === '/api/organizations') return response(method === 'GET'
+      ? await platform.centers(db, user) : await platform.createCenter(db, user, await jsonBody(request)));
     if (url.pathname === '/api/notifications' && method === 'GET') return response(await notices.notifications(db, user));
     if (url.pathname === '/api/notifications/read' && method === 'POST') {
       return response(await notices.readNotification(db, user, (await jsonBody(request)).id));
@@ -48,6 +57,7 @@ export async function onRequest({ request, env }) {
     if (parts[0] === 'organizations' && parts.length === 3) {
       const org = await administration.requireAdmin(db, user, parts[1]);
       switch (parts[2]) {
+        case 'teachers': if (method === 'POST') return response(await platform.provisionTeacher(db, user, org, await jsonBody(request))); break;
         case 'members': return response(method === 'GET'
           ? await administration.members(db, org.id)
           : await administration.updateMembership(db, user, org.id, await jsonBody(request)));
