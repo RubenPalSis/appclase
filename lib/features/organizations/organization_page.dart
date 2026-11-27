@@ -37,10 +37,10 @@ class OrganizationPage extends ConsumerWidget {
         : 'Cambiar acceso a ${roles[role]}',
     fields: [
       field(
-        'email',
-        'Correo de Google',
-        254,
-        initial: user?['email'] as String?,
+        'user_id',
+        'ID de cuenta APPCLASE',
+        100,
+        initial: user?['id'] as String?,
       ),
     ],
     save: (data) async {
@@ -77,7 +77,7 @@ class OrganizationPage extends ConsumerWidget {
     if (confirmed != true || !context.mounted) return;
     try {
       await ref.read(apiProvider).post('/organizations/$id/members', {
-        'email': user['email'],
+        'user_id': user['id'],
         'role': user['role'],
         'active': false,
       });

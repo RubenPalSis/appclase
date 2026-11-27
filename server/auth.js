@@ -1,4 +1,4 @@
-import { HttpError, cookie, cookies, first, hash, now, redirect, run, statement, token } from './security.js';
+import { HttpError, cookie, cookies, first, hash, now, run, statement, text, token } from './security.js';
 
 const sessionAge = 43200;
 
@@ -23,55 +23,72 @@ export async function logout(request, env, origin) {
   });
 }
 
-export async function oauth(request, env, url, origin) {
-  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET || !env.APP_ORIGIN || url.origin !== origin) {
-    throw new HttpError(503, 'El acceso con Google aún no está configurado en este entorno.');
-  }
-  const callback = origin + '/api/auth/callback';
-  if (url.pathname === '/api/auth/google') {
-    const state = token();
-    const verifier = token();
-    const params = new URLSearchParams({
-      client_id: env.GOOGLE_CLIENT_ID, redirect_uri: callback, response_type: 'code',
-      scope: 'openid email profile', state, code_challenge: await hash(verifier), code_challenge_method: 'S256',
-    });
-    return redirect('https://accounts.google.com/o/oauth2/v2/auth?' + params, [
-      cookie('appclase_oauth', state + '.' + verifier, 600, origin),
-    ]);
-  }
+const iterations = 100000;
 
-  const [state, verifier] = (cookies(request).appclase_oauth ?? '').split('.');
-  const code = url.searchParams.get('code');
-  const clear = cookie('appclase_oauth', '', 0, origin);
-  if (!verifier || !code || state !== url.searchParams.get('state')) {
-    return redirect('/?acceso=cancelado', [clear]);
+async function derive(password, salt) {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({
+    name: 'PBKDF2', hash: 'SHA-512', salt: encoder.encode(salt), iterations,
+  }, key, 256);
+  return btoa(String.fromCharCode(...new Uint8Array(bits)));
+}
+
+function equals(a, b) {
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ (b.charCodeAt(i) || 0);
+  return diff === 0;
+}
+
+async function limit(db, key, maximum, window) {
+  const current = Math.floor(now() / window) * window;
+  const row = await first(db, `INSERT INTO login_limits VALUES (?,?,1)
+    ON CONFLICT(key) DO UPDATE SET attempts=CASE WHEN window=excluded.window THEN attempts+1 ELSE 1 END,
+    window=excluded.window RETURNING attempts`, key, current);
+  if (row.attempts > maximum) throw new HttpError(429, 'Demasiados intentos. Prueba más tarde.');
+}
+
+export async function authenticate(request, env, origin, data, register) {
+  const db = env.DB;
+  const email = text(data.email, 254).toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, 'Introduce un correo válido.');
+  const password = data.password;
+  if (typeof password !== 'string' || password.length > 128 || password.length < (register ? 12 : 1)) {
+    throw new HttpError(400, 'La contraseña debe tener entre 12 y 128 caracteres.');
   }
-  const exchange = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    body: new URLSearchParams({
-      code, client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET,
-      redirect_uri: callback, grant_type: 'authorization_code', code_verifier: verifier,
-    }),
-  });
-  if (!exchange.ok) return redirect('/?acceso=cancelado', [clear]);
-  const { access_token: accessToken } = await exchange.json();
-  const response = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
-    headers: { Authorization: 'Bearer ' + accessToken },
-  });
-  if (!response.ok) return redirect('/?acceso=cancelado', [clear]);
-  const profile = await response.json();
-  if (profile.email_verified !== true || typeof profile.sub !== 'string' || typeof profile.email !== 'string') {
-    return redirect('/?acceso=cancelado', [clear]);
-  }
+  const source = request.headers.get('CF-Connecting-IP') || 'local';
+  await limit(db, await hash((register ? 'register:' : 'login:') + source), register ? 15 : 80, 900);
+  if (!register) await limit(db, await hash('email:' + email), 12, 900);
+
+  const existing = await first(db, `SELECT u.id,c.salt,c.digest FROM users u LEFT JOIN password_credentials c ON c.user_id=u.id
+    WHERE u.email=?`, email);
   const session = token();
+  const timestamp = now();
+  const commands = [];
+  let id;
+  if (register) {
+    if (existing) throw new HttpError(409, 'No se puede registrar esta cuenta.');
+    id = crypto.randomUUID();
+    const salt = token();
+    commands.push(
+      statement(db, 'INSERT INTO users VALUES (?,?,?)', id, email, text(data.name, 160)),
+      statement(db, 'INSERT INTO password_credentials VALUES (?,?,?)', id, salt, await derive(password, salt)),
+    );
+  } else {
+    const computed = await derive(password, existing?.salt || 'appclase-unknown-account');
+    if (!equals(computed, existing?.digest || '') || !existing) throw new HttpError(401, 'Correo o contraseña incorrectos.');
+    id = existing.id;
+  }
   const old = cookies(request).appclase_session;
-  const commands = [
-    statement(env.DB, `INSERT INTO users (id,email,name) VALUES (?,?,?)
-      ON CONFLICT(id) DO UPDATE SET email=excluded.email,name=excluded.name`,
-      profile.sub, profile.email.toLowerCase(), String(profile.name || profile.email).slice(0, 160)),
-    statement(env.DB, 'DELETE FROM sessions WHERE hash=? OR hash IN (SELECT hash FROM sessions WHERE expires<=? LIMIT 100)', old ? await hash(old) : '', now()),
-    statement(env.DB, 'INSERT INTO sessions VALUES (?,?,?)', await hash(session), profile.sub, now() + sessionAge),
-  ];
-  await env.DB.batch(commands);
-  return redirect('/', [clear, cookie('appclase_session', session, sessionAge, origin)]);
+  commands.push(
+    statement(db, 'DELETE FROM sessions WHERE hash=? OR hash IN (SELECT hash FROM sessions WHERE expires<=? LIMIT 100)',
+      old ? await hash(old) : '', timestamp),
+    statement(db, 'INSERT INTO sessions VALUES (?,?,?)', await hash(session), id, timestamp + sessionAge),
+    statement(db, 'DELETE FROM login_limits WHERE key IN (SELECT key FROM login_limits WHERE window<? LIMIT 20)', timestamp - 3600),
+  );
+  await db.batch(commands);
+  return new Response(null, {
+    status: 204,
+    headers: { 'Set-Cookie': cookie('appclase_session', session, sessionAge, origin), 'Cache-Control': 'no-store' },
+  });
 }

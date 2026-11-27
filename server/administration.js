@@ -23,10 +23,10 @@ export async function updateMembership(db, user, org, data) {
   if (!['teacher','student'].includes(data.role) || typeof data.active !== 'boolean') {
     throw new HttpError(400, 'Elige el rol y el estado de acceso.');
   }
-  const email = text(data.email, 254).toLowerCase();
+  const id = text(data.user_id, 100);
   const target = await first(db, `SELECT u.id,m.role FROM users u LEFT JOIN memberships m ON m.org_id=? AND m.user_id=u.id
-    WHERE u.email=?`, org, email);
-  if (!target) throw new HttpError(404, 'La persona debe haber iniciado sesión con Google antes.');
+    WHERE u.id=?`, org, id);
+  if (!target) throw new HttpError(404, 'La persona debe haber creado su cuenta antes.');
   if (target.role === 'admin' || target.id === user.id) throw new HttpError(403, 'Los permisos de administrador se gestionan fuera del panel.');
   await db.batch([
     statement(db, `INSERT INTO memberships (org_id,user_id,role,active) VALUES (?,?,?,?)

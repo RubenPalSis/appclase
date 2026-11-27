@@ -20,6 +20,7 @@ async function fixture(t) {
   sqlite.exec(await readFile(new URL('../migrations/0007_notifications.sql', import.meta.url), 'utf8'));
   sqlite.exec(await readFile(new URL('../migrations/0008_board.sql', import.meta.url), 'utf8'));
   sqlite.exec(await readFile(new URL('../migrations/0009_topics.sql', import.meta.url), 'utf8'));
+  sqlite.exec(await readFile(new URL('../migrations/0010_local_auth.sql', import.meta.url), 'utf8'));
   sqlite.exec(`
     INSERT INTO users VALUES ('teacher','t@example.com','Profe'),('student','s@example.com','Alumna'),
       ('outside','x@example.com','Externo'),('other','o@example.com','Otro alumno'),('admin','a@example.com','Admin');
@@ -68,7 +69,7 @@ async function fixture(t) {
       },
     },
   };
-  return async (path, user, payload, from = origin) => {
+  const call = async (path, user, payload, from = origin) => {
     const raw = payload instanceof Uint8Array;
     const headers = {};
     if (user) headers.Cookie = 'appclase_session=' + sessions.get(user);
@@ -84,8 +85,10 @@ async function fixture(t) {
       }),
       env,
     });
-    return { status: result.status, data: result.status === 204 ? null : result.headers.get('content-type')?.startsWith('text/') ? await result.text() : result.headers.has('content-disposition') ? new Uint8Array(await result.arrayBuffer()) : await result.json() };
+    return { cookie: result.headers.get('set-cookie'), status: result.status, data: result.status === 204 ? null : result.headers.get('content-type')?.startsWith('text/') ? await result.text() : result.headers.has('content-disposition') ? new Uint8Array(await result.arrayBuffer()) : await result.json() };
   };
+  call.sqlite = sqlite;
+  return call;
 }
 
 test('autenticación, cierre de sesión y origen de escrituras', async t => {
@@ -169,13 +172,13 @@ test('gestión de usuarios, revocación sin reingreso y auditoría por centro', 
   const endpoint = '/organizations/center/members';
   assert.equal((await call(endpoint,'teacher')).status, 404);
   assert.equal((await call('/organizations/different/members','admin')).status, 404);
-  assert.equal((await call(endpoint,'admin',{email:'a@example.com',role:'teacher',active:false})).status, 403);
+  assert.equal((await call(endpoint,'admin',{user_id:'admin',role:'teacher',active:false})).status, 403);
   const {data: {code}} = await call('/classes/course/invite','teacher',{});
-  assert.equal((await call(endpoint,'admin',{email:'s@example.com',role:'student',active:false})).status, 200);
+  assert.equal((await call(endpoint,'admin',{user_id:'student',role:'student',active:false})).status, 200);
   assert.equal((await call('/classes/course','student')).status, 404);
   assert.equal((await call('/join','student',{code})).status, 409);
   assert.ok((await call('/organizations/center/audit','admin')).data.some(item => item.action === 'membership.disabled'));
-  assert.equal((await call(endpoint,'admin',{email:'s@example.com',role:'student',active:true})).status, 200);
+  assert.equal((await call(endpoint,'admin',{user_id:'student',role:'student',active:true})).status, 200);
   assert.equal((await call('/classes/course','student')).status, 200);
 });
 
@@ -295,4 +298,23 @@ test('temario jerárquico, búsqueda y permisos de escritura', async t => {
   assert.deepEqual((await call(route+'/materials','student')).data,[]);
   assert.equal((await call(route+'/materials?q=%25','student')).data[0].topic,'Unidad');
   assert.equal((await call(route+'/topics?topic='+id,'outside')).status,404);
+});
+
+test('registro propio, inicio de sesión y asociaciones de roles', async t => {
+  const call = await fixture(t);
+  const account = {name:'Cuenta local',email:'local@example.com',password:'contraseña de prueba',role:'admin'};
+  assert.equal((await call('/auth/register',null,account)).status,204);
+  assert.equal((await call('/auth/login',null,{...account,password:'incorrecta'})).status,401);
+  const login = await call('/auth/login',null,account);
+  assert.equal(login.status,204);
+  assert.match(login.cookie,/HttpOnly/);
+  const {id} = call.sqlite.prepare('SELECT id FROM users WHERE email=?').get(account.email);
+  assert.equal(call.sqlite.prepare('SELECT COUNT(*) AS n FROM memberships WHERE user_id=?').get(id).n,0);
+  assert.equal(call.sqlite.prepare('SELECT COUNT(*) AS n FROM administrators').get().n,1);
+  const endpoint = '/organizations/center/members';
+  assert.equal((await call(endpoint,'admin',{user_id:id,role:'teacher',active:true})).status,200);
+  assert.equal(call.sqlite.prepare('SELECT active FROM teachers WHERE user_id=?').get(id).active,1);
+  assert.equal((await call(endpoint,'admin',{user_id:id,role:'student',active:false})).status,200);
+  assert.equal(call.sqlite.prepare('SELECT active FROM students WHERE user_id=?').get(id).active,0);
+  assert.equal(call.sqlite.prepare('SELECT active FROM teachers WHERE user_id=?').get(id),undefined);
 });

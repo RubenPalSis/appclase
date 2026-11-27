@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('Muestra el acceso con Google en una pantalla estrecha', (
+  testWidgets('Muestra el acceso con contraseña en una pantalla estrecha', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(320, 640);
@@ -21,7 +21,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byType(AccessPage), findsOneWidget);
-    expect(find.text('Continuar con Google'), findsOneWidget);
+    expect(find.text('Iniciar sesión'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

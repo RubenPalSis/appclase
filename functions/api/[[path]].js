@@ -7,7 +7,7 @@ import * as calendar from '../../server/calendar.js';
 import * as grades from '../../server/grades.js';
 import * as files from '../../server/documents.js';
 import * as administration from '../../server/administration.js';
-import { currentUser, logout, oauth } from '../../server/auth.js';
+import { authenticate, currentUser, logout } from '../../server/auth.js';
 import * as classes from '../../server/classes.js';
 import * as exams from '../../server/exams.js';
 import * as learning from '../../server/learning.js';
@@ -26,8 +26,8 @@ export async function onRequest({ request, env }) {
     if (method !== 'GET' && (method !== 'POST' || request.headers.get('origin') !== origin || url.origin !== origin)) {
       throw new HttpError(403, 'Origen de solicitud no autorizado.');
     }
-    if (method === 'GET' && ['/api/auth/google','/api/auth/callback'].includes(url.pathname)) {
-      return await oauth(request, env, url, origin);
+    if (method === 'POST' && ['/api/auth/login','/api/auth/register'].includes(url.pathname)) {
+      return await authenticate(request, env, origin, await jsonBody(request), url.pathname.endsWith('/register'));
     }
     const user = await currentUser(request, env);
     const db = env.DB;

@@ -111,7 +111,7 @@ class _EditFieldsDialogState extends State<EditFieldsDialog> {
     try {
       await widget.save({
         for (final entry in controllers.entries)
-          entry.key: entry.value.text.trim(),
+          entry.key: entry.key == 'password' ? entry.value.text : entry.value.text.trim(),
       });
       if (mounted) Navigator.of(context).pop();
     } catch (exception) {
@@ -145,6 +145,7 @@ class _EditFieldsDialogState extends State<EditFieldsDialog> {
                       enabled: !saving,
                       decoration: InputDecoration(labelText: field.label),
                       maxLength: field.max,
+                      obscureText: field.key == 'password',
                       minLines: field.max > 1000 ? 3 : 1,
                       maxLines: field.max > 1000 ? 6 : 1,
                       validator: (value) =>

@@ -9,11 +9,28 @@ import '../../main.dart' show ThemeButton;
 import '../classes/coursework.dart';
 import '../notifications/notifications_page.dart';
 
-class AccessPage extends StatelessWidget {
+class AccessPage extends ConsumerWidget {
   const AccessPage({super.key});
 
+  Future<void> credentials(BuildContext context, WidgetRef ref, bool register) =>
+      editFields(
+        context,
+        title: register ? 'Crear cuenta' : 'Iniciar sesión',
+        fields: [
+          if (register) field('name', 'Nombre', 160),
+          field('email', 'Correo electrónico', 254),
+          field('password', 'Contraseña', 128),
+        ],
+        save: (data) async {
+          await ref.read(apiProvider).post(
+            register ? '/auth/register' : '/auth/login', data,
+          );
+          ref.invalidate(sessionProvider);
+        },
+      );
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(actions: const [ThemeButton()]),
@@ -48,25 +65,14 @@ class AccessPage extends StatelessWidget {
                 'Tus clases, materiales y entregas en un mismo lugar.',
                 style: theme.textTheme.titleMedium,
               ),
-              if (Uri.base.queryParameters['acceso'] == 'cancelado')
-                const Padding(
-                  padding: EdgeInsets.only(top: 12),
-                  child: Text('No se pudo completar el inicio de sesión.'),
-                ),
               const SizedBox(height: 28),
-              FilledButton.icon(
-                onPressed: () {
-                  final invitation = Uri.base.queryParameters['invitacion'];
-                  if (invitation != null) {
-                    web.window.sessionStorage.setItem(
-                      'appclase.invitation',
-                      invitation,
-                    );
-                  }
-                  web.window.location.assign('/api/auth/google');
-                },
-                icon: const Icon(Icons.login_rounded),
-                label: const Text('Continuar con Google'),
+              FilledButton(
+                onPressed: () => credentials(context, ref, false),
+                child: const Text('Iniciar sesión'),
+              ),
+              TextButton(
+                onPressed: () => credentials(context, ref, true),
+                child: const Text('Crear cuenta'),
               ),
             ],
           ),
@@ -213,6 +219,13 @@ class HomePage extends ConsumerWidget {
                 onTap: () => context.push('/centros/${org['id']}'),
               ),
             ),
+          ExpansionTile(
+            title: const Text('Mi cuenta'),
+            children: [
+              ListTile(title: const Text('ID de cuenta APPCLASE'),
+                subtitle: SelectableText(user['id'] as String? ?? '')),
+            ],
+          ),
           Text('Mis clases', style: theme.textTheme.headlineSmall),
           const SizedBox(height: 10),
           ref
