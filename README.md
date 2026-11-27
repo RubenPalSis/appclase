@@ -7,6 +7,7 @@ Plataforma educativa web instalable escrita en Flutter y Dart. La aplicación y 
 - Google OAuth con PKCE, correo verificado y sesiones HttpOnly. Revocación de la sesión al cerrar sesión.
 - Roles de administrador, profesor y alumno por centro. El administrador puede acceder a las clases del centro. El profesor solo accede a las clases de las que es responsable. El alumno necesita estar matriculado.
 - Administración de accesos de profesores y alumnos, nombre de centro e historial administrativo.
+- Panel de clases y próximas entregas y exámenes, filtrados por acceso y estado de entrega.
 - Creación y archivo de clases, invitaciones revocables vía rotación con caducidad de siete días y listado de alumnos.
 - Tablón con comentarios, permisos del alumnado, edición, eliminación, publicaciones fijadas y programación. Materiales mediante enlaces HTTPS. Subida y descarga privada de documentos si se conecta el bucket R2.
 - Tareas individuales con fecha límite, entregas de texto o enlace, corrección y feedback privado.
@@ -46,13 +47,13 @@ flutter test --platform chrome
 node --test scripts/api.test.mjs
 flutter build web
 node scripts/build_pwa.mjs
-npx --yes wrangler@4 d1 migrations apply appclase --local
-npx --yes wrangler@4 pages dev build/web --port 8788
+npx --yes wrangler@4.168.0 d1 migrations apply appclase --local
+npx --yes wrangler@4.168.0 pages dev build/web --port 8788
 ```
 
 La API y Flutter deben abrirse desde el mismo origen, por ejemplo `http://localhost:8788`. Para OAuth local, crea un cliente OAuth web y registra exactamente `http://localhost:8788/api/auth/callback`. Copia `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` y `APP_ORIGIN=http://localhost:8788` a `.dev.vars` para Wrangler. `secretos.env` sirve para preparar la configuración y permanece excluido de Git. No cargues los tokens de despliegue en el navegador ni en `.dev.vars`.
 
-Las pruebas de API ejecutan las migraciones y el manejador real sobre SQLite local. La capa D1 de prueba simula su interfaz. Para comprobar OAuth y la integración con Wrangler, inicia sesión desde la PWA y recorre los flujos con dos cuentas en el mismo centro y una tercera en otro centro.
+Las pruebas de API ejecutan las migraciones y el manejador real sobre SQLite local. La capa D1 de prueba simula su interfaz. El flujo de CI también prueba Pages Functions y D1 con Wrangler local, sin credenciales externas. Para comprobar OAuth, inicia sesión desde la PWA y recorre los flujos con dos cuentas en el mismo centro y una tercera en otro centro.
 
 ## Primer centro y administrador
 

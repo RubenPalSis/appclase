@@ -1,3 +1,4 @@
+import { upcoming } from '../../server/dashboard.js';
 import * as board from '../../server/board.js';
 import * as notices from '../../server/notifications.js';
 import * as messages from '../../server/messages.js';
@@ -38,6 +39,7 @@ export async function onRequest({ request, env }) {
     if (url.pathname === '/api/notifications/preferences') return response(method === 'GET'
       ? await notices.preferences(db, user)
       : await notices.setPreference(db, user, await jsonBody(request)));
+    if (url.pathname === '/api/dashboard/upcoming' && method === 'GET') return response(await upcoming(db, user));
     if (url.pathname === '/api/join' && method === 'POST') return response(await classes.joinClass(db, user, await jsonBody(request)));
     if (url.pathname === '/api/classes') return response(method === 'GET'
       ? await classes.visibleClasses(db, user)

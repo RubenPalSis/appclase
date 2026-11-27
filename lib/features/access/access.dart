@@ -6,6 +6,7 @@ import 'package:web/web.dart' as web;
 import '../../core/api.dart';
 import '../../core/widgets.dart';
 import '../../main.dart' show ThemeButton;
+import '../classes/coursework.dart';
 import '../notifications/notifications_page.dart';
 
 class AccessPage extends StatelessWidget {
@@ -263,6 +264,31 @@ class HomePage extends ConsumerWidget {
                         },
                       ),
               ),
+          const SizedBox(height: 24),
+          Text(
+            'Próximas entregas y exámenes',
+            style: theme.textTheme.headlineSmall,
+          ),
+          const SizedBox(height: 6),
+          Rows(
+            path: '/dashboard/upcoming',
+            empty: 'No tienes entregas pendientes ni exámenes en los próximos 30 días.',
+            builder: (item) => Card(
+              child: ListTile(
+                leading: Icon(
+                  item['type'] == 'exam'
+                      ? Icons.quiz_outlined
+                      : Icons.assignment_outlined,
+                ),
+                title: Text(item['title'] as String),
+                subtitle: Text(
+                  '${item['name']} · ${dateLabel(context, item['date'] as int)}',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push('/clases/${item['class_id']}'),
+              ),
+            ),
+          ),
         ],
       ),
     );

@@ -91,8 +91,9 @@ class NotificationsPage extends ConsumerWidget {
                 ),
                 onTap: () async {
                   if (!seen) await mark(context, ref, notice);
-                  if (context.mounted)
+                  if (context.mounted) {
                     context.push('/clases/${notice['class_id']}');
+                  }
                 },
                 trailing: seen
                     ? null

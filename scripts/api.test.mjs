@@ -270,3 +270,14 @@ test('tablón con permisos de alumnado, programación y moderación', async t =>
   assert.equal((await call(route+'/posts/'+id+'/delete','teacher',{})).status, 200);
   assert.equal((await call(route+'/posts/'+id+'/comments','other')).status, 404);
 });
+
+test('panel de próximas entregas respeta pertenencia y entregas realizadas', async t => {
+  const call = await fixture(t);
+  const route = '/classes/course/assignments';
+  await call(route,'teacher',{title:'Práctica',body:'Texto',due:now()+60,points:10,allow_late:false});
+  assert.deepEqual((await call('/dashboard/upcoming','outside')).data, []);
+  const [{id}] = (await call('/dashboard/upcoming','student')).data;
+  await call(route+'/'+id+'/deliver','student',{body:'Respuesta'});
+  assert.deepEqual((await call('/dashboard/upcoming','student')).data, []);
+  assert.equal((await call('/dashboard/upcoming','teacher')).data.length, 1);
+});
