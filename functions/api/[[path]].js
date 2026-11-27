@@ -1,3 +1,4 @@
+import * as messages from '../../server/messages.js';
 import * as calendar from '../../server/calendar.js';
 import * as grades from '../../server/grades.js';
 import * as files from '../../server/documents.js';
@@ -38,6 +39,7 @@ export async function onRequest({ request, env }) {
         case 'members': return response(method === 'GET'
           ? await administration.members(db, org.id)
           : await administration.updateMembership(db, user, org.id, await jsonBody(request)));
+        case 'reports': if (method === 'GET') return response(await messages.reports(db, org.id)); break;
         case 'audit': if (method === 'GET') return response(await administration.logs(db, org.id)); break;
         case 'settings': return response(method === 'GET'
           ? org : await administration.rename(db, user, org.id, await jsonBody(request)));
@@ -54,6 +56,16 @@ export async function onRequest({ request, env }) {
       return response(method === 'GET'
         ? await files.documents(db, course)
         : await files.upload(env, course, request, url.searchParams.get('name')));
+    }
+    if (section === 'messages') {
+      if (parts.length === 3 && method === 'GET') return response(await messages.threads(db, course, user));
+      if (parts.length === 4) return response(method === 'GET'
+        ? await messages.thread(db, course, user, parts[3])
+        : await messages.send(db, course, user, parts[3], await jsonBody(request)));
+      if (parts.length === 5 && method === 'POST') {
+        if (parts[4] === 'read') return response(await messages.markRead(db, course, user, parts[3], await jsonBody(request)));
+        if (parts[4] === 'report') return response(await messages.report(db, course, user, parts[3], await jsonBody(request)));
+      }
     }
     if (parts.length === 5 && section === 'assignments') {
       const [, , , id, action] = parts;

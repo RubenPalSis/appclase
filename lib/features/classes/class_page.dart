@@ -11,6 +11,7 @@ import 'calendar_page.dart';
 import 'coursework.dart';
 import 'documents_page.dart';
 import 'exams.dart';
+import 'messages_page.dart';
 
 enum ClassSection {
   board('Tablón', Icons.dashboard_outlined),
@@ -21,6 +22,7 @@ enum ClassSection {
   documents('Archivos', Icons.description_outlined),
   calendar('Calendario', Icons.calendar_month_outlined),
   grades('Calificaciones', Icons.grade_outlined),
+  messages('Mensajes', Icons.forum_outlined),
   attendance('Asistencia', Icons.event_available_outlined);
 
   const ClassSection(this.label, this.icon);
@@ -186,6 +188,10 @@ class _ClassPageState extends ConsumerState<ClassPage> {
             ClassSection.grades => GradesPage(
               path: '$path/grades',
               staff: staff,
+            ),
+            ClassSection.messages => MessagesPage(
+              path: '$path/messages',
+              archived: archived,
             ),
             ClassSection.attendance => AttendancePage(
               path: path,

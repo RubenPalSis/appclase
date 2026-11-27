@@ -16,6 +16,7 @@ async function fixture(t) {
   sqlite.exec(await readFile(new URL('../migrations/0003_membership_status.sql', import.meta.url), 'utf8'));
   sqlite.exec(await readFile(new URL('../migrations/0004_documents.sql', import.meta.url), 'utf8'));
   sqlite.exec(await readFile(new URL('../migrations/0005_calendar.sql', import.meta.url), 'utf8'));
+  sqlite.exec(await readFile(new URL('../migrations/0006_messages.sql', import.meta.url), 'utf8'));
   sqlite.exec(`
     INSERT INTO users VALUES ('teacher','t@example.com','Profe'),('student','s@example.com','Alumna'),
       ('outside','x@example.com','Externo'),('other','o@example.com','Otro alumno'),('admin','a@example.com','Admin');
@@ -215,4 +216,21 @@ test('calificaciones privadas y exportación CSV con campos neutralizados', asyn
   assert.deepEqual((await call(route+'/grades','other')).data, []);
   assert.equal((await call(route+'/grades/export','student')).status, 403);
   assert.ok((await call(route+'/grades/export','teacher')).data.includes("\"'=1+1\""));
+});
+
+test('conversaciones privadas, no leídos y moderación de mensajes reportados', async t => {
+  const call = await fixture(t);
+  const route = '/classes/course/messages';
+  const endpoint = route+'/student';
+  assert.equal((await call(endpoint,'other',{body:'Intrusión'})).status, 404);
+  assert.equal((await call(endpoint,'admin')).status, 404);
+  assert.equal((await call(endpoint,'teacher',{body:'Revisa el temario'})).status, 200);
+  assert.equal((await call(route,'student')).data[0].unread, 1);
+  const [{sequence}] = (await call(endpoint,'student')).data;
+  assert.equal((await call(endpoint+'/read','student',{last_seen:sequence})).status, 200);
+  assert.equal((await call(route,'student')).data[0].unread, 0);
+  assert.deepEqual((await call('/organizations/center/reports','admin')).data, []);
+  assert.equal((await call(endpoint+'/report','student',{id:sequence,reason:'Motivo de prueba'})).status, 200);
+  assert.equal((await call('/organizations/center/reports','admin')).data[0].body, 'Revisa el temario');
+  assert.equal((await call('/organizations/center/reports','teacher')).status, 404);
 });

@@ -198,6 +198,24 @@ class OrganizationPage extends ConsumerWidget {
                 ),
                 const SizedBox(height: 24),
                 Text(
+                  'Mensajes reportados',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                Rows(
+                  path: '/organizations/$id/reports',
+                  empty: 'No hay mensajes reportados.',
+                  builder: (report) => Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.flag_outlined),
+                      title: Text('${report['course']} · ${report['reason']}'),
+                      subtitle: Text(
+                        'De ${report['sender']}, reportado por ${report['reporter']}\n${report['body']}',
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
                   'Actividad administrativa',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
