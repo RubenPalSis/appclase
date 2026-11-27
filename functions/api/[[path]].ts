@@ -143,6 +143,7 @@ export async function onRequest({ request, env }: { request: Request; env: Env }
         case 'exams': return response(await exams.createExam(db, course, data));
         case 'assignments': return response(await learning.addAssignment(db, course, data));
         case 'attendance': return response(await learning.markAttendance(db, course, data));
+        case 'subject-color': return response(await classes.updateSubjectColor(db, course, user, data));
         case 'archive': return response(await classes.archive(db, course, user, data));
         case 'invite': return response(await classes.invite(db, course, user));
       }
