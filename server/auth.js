@@ -8,7 +8,8 @@ export async function currentUser(request, env) {
     throw new HttpError(401, 'Inicia sesión para continuar.');
   }
   const user = await first(env.DB, `
-    SELECT u.id,u.email,u.name FROM sessions s JOIN users u ON s.user_id=u.id
+    SELECT u.id,u.email,u.name,COALESCE(c.must_change,0) AS must_change FROM sessions s JOIN users u ON s.user_id=u.id
+    LEFT JOIN password_credentials c ON c.user_id=u.id
     WHERE s.hash=? AND s.expires>?`, await hash(session), now());
   if (!user) throw new HttpError(401, 'La sesión ha caducado.');
   return user;
@@ -50,8 +51,7 @@ async function limit(db, key, maximum, window) {
 
 export async function authenticate(request, env, origin, data, register) {
   const db = env.DB;
-  const email = text(data.email, 254).toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, 'Introduce un correo válido.');
+  const email = readEmail(data.email);
   const password = data.password;
   if (typeof password !== 'string' || password.length > 128 || password.length < (register ? 12 : 1)) {
     throw new HttpError(400, 'La contraseña debe tener entre 12 y 128 caracteres.');
@@ -60,7 +60,7 @@ export async function authenticate(request, env, origin, data, register) {
   await limit(db, await hash((register ? 'register:' : 'login:') + source), register ? 15 : 80, 900);
   if (!register) await limit(db, await hash('email:' + email), 12, 900);
 
-  const existing = await first(db, `SELECT u.id,c.salt,c.digest FROM users u LEFT JOIN password_credentials c ON c.user_id=u.id
+  const existing = await first(db, `SELECT u.id,c.salt,c.digest,c.must_change FROM users u LEFT JOIN password_credentials c ON c.user_id=u.id
     WHERE u.email=?`, email);
   const session = token();
   const timestamp = now();
@@ -72,11 +72,17 @@ export async function authenticate(request, env, origin, data, register) {
     const salt = token();
     commands.push(
       statement(db, 'INSERT INTO users VALUES (?,?,?)', id, email, text(data.name, 160)),
-      statement(db, 'INSERT INTO password_credentials VALUES (?,?,?)', id, salt, await derive(password, salt)),
+      statement(db, 'INSERT INTO password_credentials (user_id,salt,digest) VALUES (?,?,?)', id, salt, await derive(password, salt)),
     );
   } else {
     const computed = await derive(password, existing?.salt || 'appclase-unknown-account');
     if (!equals(computed, existing?.digest || '') || !existing) throw new HttpError(401, 'Correo o contraseña incorrectos.');
+    if (existing.must_change) {
+      const code = typeof data.center_code === 'string' ? data.center_code.trim().toUpperCase() : '';
+      const center = await first(db, `SELECT o.id FROM memberships m JOIN organizations o ON o.id=m.org_id
+        WHERE m.user_id=? AND m.role='teacher' AND m.active=1 AND o.access_code=?`, existing.id, code);
+      if (!center) throw new HttpError(401, 'Introduce el código de cuatro caracteres de tu centro.');
+    }
     id = existing.id;
   }
   const old = cookies(request).appclase_session;
@@ -91,4 +97,35 @@ export async function authenticate(request, env, origin, data, register) {
     status: 204,
     headers: { 'Set-Cookie': cookie('appclase_session', session, sessionAge, origin), 'Cache-Control': 'no-store' },
   });
+}
+
+export function readEmail(value) {
+  const email = text(value, 254).toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, 'Introduce un correo válido.');
+  return email;
+}
+
+export async function passwordRecord(password) {
+  const salt = token();
+  return { salt, digest: await derive(password, salt) };
+}
+
+export async function activatePassword(request, env, user, data) {
+  if (!user.must_change) throw new HttpError(409, 'La cuenta ya está activada.');
+  const password = data.password;
+  if (typeof password !== 'string' || password.length < 12 || password.length > 128) {
+    throw new HttpError(400, 'La contraseña debe tener entre 12 y 128 caracteres.');
+  }
+  const db = env.DB;
+  const credential = await first(db, 'SELECT salt,digest FROM password_credentials WHERE user_id=?', user.id);
+  if (equals(await derive(password, credential.salt), credential.digest)) {
+    throw new HttpError(400, 'Elige una contraseña distinta a la temporal.');
+  }
+  const { salt, digest } = await passwordRecord(password);
+  const sessionHash = await hash(cookies(request).appclase_session);
+  await db.batch([
+    statement(db, 'UPDATE password_credentials SET salt=?,digest=?,must_change=0 WHERE user_id=? AND must_change=1', salt, digest, user.id),
+    statement(db, 'DELETE FROM sessions WHERE user_id=? AND hash<>?', user.id, sessionHash),
+  ]);
+  return {};
 }
