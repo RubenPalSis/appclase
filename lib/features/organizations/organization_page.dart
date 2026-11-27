@@ -21,9 +21,26 @@ const auditEvents = {
   'invitation.rotated': 'Código de invitación renovado',
 };
 
-class OrganizationPage extends ConsumerWidget {
-  const OrganizationPage({required this.id, super.key});
+class OrganizationPage extends ConsumerStatefulWidget {
+  const OrganizationPage({required this.id, this.initialSection, super.key});
   final String id;
+  final String? initialSection;
+
+  @override
+  ConsumerState<OrganizationPage> createState() => _OrganizationPageState();
+}
+
+class _OrganizationPageState extends ConsumerState<OrganizationPage> {
+  String get id => widget.id;
+  static const sections = {
+    'overview': 'Resumen',
+    'teachers': 'Profesores',
+    'students': 'Alumnos',
+    'reports': 'Reportes',
+    'activity': 'Actividad',
+  };
+  late String selected = sections.containsKey(widget.initialSection)
+      ? widget.initialSection! : 'overview';
 
   Future<void> manage(
     BuildContext context,
@@ -108,7 +125,7 @@ class OrganizationPage extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final session = ref.watch(sessionProvider).value;
     final organizations = (session?['organizations'] as List? ?? [])
         .cast<Record>();
@@ -136,19 +153,32 @@ class OrganizationPage extends ConsumerWidget {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    FilledButton(
+                    for (final entry in sections.entries)
+                      ChoiceChip(
+                        label: Text(entry.value),
+                        selected: selected == entry.key,
+                        onSelected: (_) => setState(() => selected = entry.key),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    if (selected == 'teachers') FilledButton(
                       onPressed: () => provision(context, ref),
                       child: const Text('Crear profesor'),
                     ),
-                    OutlinedButton(
+                    if (selected == 'teachers') OutlinedButton(
                       onPressed: () => manage(context, ref, 'teacher'),
                       child: const Text('Vincular profesor existente'),
                     ),
-                    OutlinedButton(
+                    if (selected == 'students') OutlinedButton(
                       onPressed: () => manage(context, ref, 'student'),
                       child: const Text('Añadir alumno'),
                     ),
-                    OutlinedButton(
+                    if (selected == 'overview') OutlinedButton(
                       onPressed: () => editFields(
                         context,
                         title: 'Cambiar nombre del centro',
@@ -169,14 +199,23 @@ class OrganizationPage extends ConsumerWidget {
                   ],
                 ),
                 const SizedBox(height: 20),
-                Text(
-                  'Usuarios del centro',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                Rows(
-                  path: '/organizations/$id/members',
-                  empty: 'Todavía no hay usuarios.',
-                  builder: (user) {
+                if (selected == 'overview')
+                  Card(child: ListTile(
+                    leading: const Icon(Icons.apartment_outlined),
+                    title: Text(name),
+                    subtitle: Text("Código del centro: ${organizations.firstWhere((org) => org['id'] == id)['access_code'] ?? '—'}"),
+                  )),
+                if (selected == 'teachers' || selected == 'students')
+                  ref.watch(rowsProvider('/organizations/$id/members')).when(
+                    loading: () => const LinearProgressIndicator(),
+                    error: (error, _) => LoadError(errorMessage(error),
+                      () => ref.invalidate(rowsProvider('/organizations/$id/members'))),
+                    data: (members) {
+                      final role = selected == 'teachers' ? 'teacher' : 'student';
+                      final visible = members.where((member) => member['role'] == role).toList();
+                      return visible.isEmpty
+                          ? const Card(child: ListTile(title: Text('Todavía no hay cuentas en este apartado.')))
+                          : Column(children: visible.map((user) {
                     final role = user['role'] as String;
                     final active = user['active'] == 1;
                     return Card(
@@ -216,9 +255,10 @@ class OrganizationPage extends ConsumerWidget {
                               ),
                       ),
                     );
-                  },
-                ),
-                const SizedBox(height: 24),
+                          }).toList());
+                    },
+                  ),
+                if (selected == 'reports') ...[
                 Text(
                   'Mensajes reportados',
                   style: Theme.of(context).textTheme.titleLarge,
@@ -236,7 +276,8 @@ class OrganizationPage extends ConsumerWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
+                ],
+                if (selected == 'activity') ...[
                 Text(
                   'Actividad administrativa',
                   style: Theme.of(context).textTheme.titleLarge,
@@ -254,6 +295,7 @@ class OrganizationPage extends ConsumerWidget {
                     ),
                   ),
                 ),
+                ],
               ],
             ),
     );

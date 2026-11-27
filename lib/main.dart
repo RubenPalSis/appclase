@@ -28,12 +28,12 @@ final router = GoRouter(
     GoRoute(
       path: '/centros/:id',
       builder: (_, state) =>
-          SessionGate(child: OrganizationPage(id: state.pathParameters['id']!)),
+          SessionGate(child: OrganizationPage(id: state.pathParameters['id']!, initialSection: state.uri.queryParameters['seccion'])),
     ),
     GoRoute(
       path: '/clases/:id',
       builder: (_, state) =>
-          SessionGate(child: ClassPage(id: state.pathParameters['id']!)),
+          SessionGate(child: ClassPage(id: state.pathParameters['id']!, initialSection: state.uri.queryParameters['seccion'])),
     ),
   ],
 );

@@ -32,15 +32,19 @@ enum ClassSection {
 }
 
 class ClassPage extends ConsumerStatefulWidget {
-  const ClassPage({required this.id, super.key});
+  const ClassPage({required this.id, this.initialSection, super.key});
   final String id;
+  final String? initialSection;
 
   @override
   ConsumerState<ClassPage> createState() => _ClassPageState();
 }
 
 class _ClassPageState extends ConsumerState<ClassPage> {
-  ClassSection selected = ClassSection.board;
+  late ClassSection selected = ClassSection.values.firstWhere(
+    (section) => section.name == widget.initialSection,
+    orElse: () => ClassSection.board,
+  );
   bool collapsed = false;
   bool changing = false;
 

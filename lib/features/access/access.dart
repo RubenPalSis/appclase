@@ -169,13 +169,19 @@ class _HomePageState extends ConsumerState<HomePage> {
     final teacher = staff.isNotEmpty && !admin;
     final role = admin ? 'Administración' : teacher ? 'Espacio docente' : 'Espacio del alumno';
     final labels = admin
-        ? ['Centros educativos', 'Clases', 'Mi cuenta']
-        : teacher ? ['Mis clases', 'Agenda docente', 'Mi cuenta']
+        ? ['Centros educativos', 'Clases', 'Mi cuenta', 'Profesores', 'Alumnos', 'Actividad']
+        : teacher ? ['Mis clases', 'Agenda docente', 'Mi cuenta', 'Alumnos', 'Tareas', 'Calificaciones', 'Asistencia']
         : ['Mis clases', 'Próximas entregas', 'Mi cuenta'];
     final icons = [
       admin ? Icons.apartment_rounded : Icons.school_outlined,
       admin ? Icons.school_outlined : Icons.event_note_outlined,
       Icons.person_outline,
+      if (admin || teacher) ...[
+        admin ? Icons.badge_outlined : Icons.people_outline,
+        admin ? Icons.people_outline : Icons.assignment_outlined,
+        admin ? Icons.history : Icons.grade_outlined,
+        if (teacher) Icons.event_available_outlined,
+      ],
     ];
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
@@ -193,6 +199,7 @@ class _HomePageState extends ConsumerState<HomePage> {
           ),
           Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Text(role)),
           const Divider(height: 32),
+          Expanded(child: ListView(children: [
           for (var i = 0; i < labels.length; i++)
             ListTile(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -205,7 +212,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                 if (!wide) Navigator.of(context).pop();
               },
             ),
-          const Spacer(),
+          ])),
           ListTile(leading: const Icon(Icons.logout_rounded), title: const Text('Cerrar sesión'), onTap: logout),
         ],
       ),
@@ -225,9 +232,9 @@ class _HomePageState extends ConsumerState<HomePage> {
             const SizedBox(height: 16),
             FilledButton.tonalIcon(onPressed: createCenter, icon: const Icon(Icons.add), label: const Text('Crear centro')),
           ],
-          if (selected == 0 && !admin) ...[
+          if (selected == 0 && !admin || selected == 1 && admin) ...[
             const SizedBox(height: 16),
-            if (teacher)
+            if (teacher || admin)
               PopupMenuButton<Record>(
                 tooltip: 'Crear clase',
                 onSelected: (org) => create(context, ref, org),
@@ -242,13 +249,18 @@ class _HomePageState extends ConsumerState<HomePage> {
         ]),
       ),
       const SizedBox(height: 20),
+      if (selected >= 3)
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Text(admin ? 'Selecciona un centro para abrir este apartado.' : 'Selecciona una clase para abrir este apartado.'),
+        ),
       if (selected == 2)
         Card(child: ListTile(
           leading: const Icon(Icons.account_circle_outlined),
           title: Text(user['name'] as String),
           subtitle: SelectableText("ID de cuenta: ${user['id'] ?? ''}"),
         ))
-      else if (admin && selected == 0)
+      else if (admin && (selected == 0 || selected >= 3))
         Rows(path: '/organizations', empty: 'Aún no hay centros.', builder: (center) => Card(
           child: ListTile(
             contentPadding: const EdgeInsets.all(16),
@@ -256,10 +268,12 @@ class _HomePageState extends ConsumerState<HomePage> {
             title: Text(center['name'] as String),
             subtitle: Text("Código: ${center['access_code'] ?? '—'} · ${center['teachers']} profesores · ${center['students']} alumnos"),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => context.push('/centros/${center['id']}'),
+            onTap: () => context.push('/centros/${center['id']}?seccion=${switch(selected) {
+              3 => 'teachers', 4 => 'students', 5 => 'activity', _ => 'overview',
+            }}'),
           ),
         ))
-      else if (selected == 0 || admin)
+      else if (selected == 0 || admin || teacher && selected >= 3)
         ref.watch(classesProvider).when(
           loading: () => const LinearProgressIndicator(),
           error: (error, _) => LoadError(errorMessage(error), () => ref.invalidate(classesProvider)),
@@ -273,7 +287,9 @@ class _HomePageState extends ConsumerState<HomePage> {
                       title: Text(course['name'] as String),
                       subtitle: Text("${course['subject']} · ${course['organization']}"),
                       trailing: const Icon(Icons.chevron_right),
-                      onTap: () => context.push('/clases/${course['id']}'),
+                      onTap: () => context.push('/clases/${course['id']}?seccion=${teacher ? switch(selected) {
+                        3 => 'students', 4 => 'assignments', 5 => 'grades', 6 => 'attendance', _ => 'board',
+                      } : 'board'}'),
                     )),
                 ]),
         )
