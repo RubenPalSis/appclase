@@ -1,5 +1,6 @@
 import { requireStaff } from './classes.ts';
-import { bucket, downloadObject, readDocument } from './documents.ts';
+import { downloadObject, readDocument } from './documents.ts';
+import { bucket } from './storage.ts';
 import { HttpError, first, integer, list, now, run, text } from './security.ts';
 
 export function lessons(db, course) {

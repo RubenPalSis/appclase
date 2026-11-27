@@ -8,7 +8,7 @@ La aplicación ya tiene acceso por correo y contraseña, alta de cuentas, activa
 
 La API valida permisos en el servidor; ocultar una opción en la interfaz no concede ni revoca acceso. Las rutas y tablas existentes de D1 se conservan durante esta migración.
 
-El producto aún requiere trabajo antes de comercializarlo con centros reales: activar y probar los servicios de correo y documentos en producción, definir la retención de datos y completar las pruebas de accesibilidad y la revisión de privacidad aplicable a cada centro. Los archivos de materiales requieren configurar un bucket R2 privado; el binding no está activado en este repositorio. No se deben cargar datos reales de menores hasta completar las revisiones del centro y de privacidad.
+El producto aún requiere trabajo antes de comercializarlo con centros reales: activar y probar los servicios de correo y documentos en producción, definir la retención de datos y completar las pruebas de accesibilidad y la revisión de privacidad aplicable a cada centro. Los archivos requieren un bucket privado de Supabase Storage configurado en el entorno de Pages. No se deben cargar datos reales de menores hasta completar las revisiones del centro y de privacidad.
 
 ## Arquitectura
 
@@ -68,7 +68,8 @@ npm test
 3. Crea el proyecto Pages `appclase` y conecta el repositorio o publica el artefacto `build/web`.
 4. En GitHub, guarda `CLOUDFLARE_API_TOKEN` y `CLOUDFLARE_ACCOUNT_ID` como secretos del entorno `production`. No los pongas en `VITE_*`, código del navegador ni el repositorio.
 5. El despliegue continuo queda condicionado a `APPCLASE_DEPLOY=true`; si no está habilitado, CI solo verifica y genera el artefacto. Pages aplica HTTPS y permite conectar un dominio personalizado desde el panel de Cloudflare.
-6. Para archivos, configura un bucket R2 privado y habilita el binding `DOCUMENTS` solo tras revisar límites, acceso y coste.
+6. Para archivos, crea un proyecto de Supabase con el plan Free y un bucket privado `appclase-documentos`. Configura el límite del bucket en 50 MB y deja desactivado el acceso público. En Pages, configura `SUPABASE_URL` (URL del proyecto), `SUPABASE_BUCKET` (nombre del bucket) y `SUPABASE_STORAGE_KEY` (clave secreta del proyecto). Guarda esta última como secreto del entorno de producción. Vuelve a desplegar y prueba con archivos ficticios y cuentas autorizadas.
+7. APPCLASE reserva hasta 800 MB para las subidas que gestiona. Usa el proyecto de Supabase solo para APPCLASE y revisa la transferencia en el panel de uso si se reproducen muchos vídeos. Los archivos y las credenciales se manejan desde la API del servidor.
 
 `secretos.env.example` es una plantilla local sin secretos. El archivo `secretos.env` está excluido de Git. No actives servicios con facturación sin revisar primero límites y precios vigentes.
 
@@ -94,7 +95,7 @@ Ejecuta ese SQL únicamente en la D1 correcta y comprueba que devuelve una fila.
 
 ## Costes y límites
 
-Pages, Workers y D1 pueden servir un piloto dentro de las cuotas gratuitas vigentes, sujetas a cambios y límites de uso. R2 puede facturar si se exceden sus cuotas o condiciones. El código no activa servicios adicionales facturables. La entrega de correo, push, respaldo operativo y alto volumen pueden requerir proveedores o planes adicionales.
+Pages, Workers y D1 pueden servir un piloto dentro de las cuotas gratuitas vigentes, sujetas a cambios y límites de uso. El almacenamiento de producción utiliza el plan gratuito de Supabase. El código no activa servicios adicionales facturables. La entrega de correo, push, respaldo operativo y alto volumen pueden requerir proveedores o planes adicionales.
 
 ## Diagnóstico
 
@@ -113,11 +114,11 @@ son de ejecución y deben configurarse en el entorno de Cloudflare. Prueba
 el flujo con cuentas de prueba antes de habilitarlos para el alumnado.
 Los enlaces caducan a los 30 minutos y se consumen una sola vez.
 
-En el aula, `Videoclases y PDF` admite PDF de hasta 16 MB y vídeos MP4 o WebM de hasta 48 MB con el bucket `DOCUMENTS` activo. Los vídeos se sirven con peticiones por rangos. El profesorado puede mostrar las videoclases, PDF y exámenes en Agenda con un candado u ocultarlos hasta la apertura. La API aplica estas reglas también a las descargas directas. La pestaña Mensajes conecta de forma privada al profesor responsable con cada alumno de la clase.
+En el aula, `Videoclases y PDF` admite PDF de hasta 16 MB y vídeos MP4 o WebM de hasta 48 MB con el bucket privado configurado. Los vídeos se sirven con peticiones por rangos. El profesorado puede mostrar las videoclases, PDF y exámenes en Agenda con un candado u ocultarlos hasta la apertura. La API aplica estas reglas también a las descargas directas. La pestaña Mensajes conecta de forma privada al profesor responsable con cada alumno de la clase.
 
 ### Copias y recuperación
 
 - Antes de migrar producción, registra un marcador de D1 con `wrangler d1 time-travel info appclase`.
-- Guarda las exportaciones de D1 y las copias de R2 en almacenamiento privado cifrado, con acceso y retención controlados. Conserva las claves de objeto de R2 y un inventario con tamaño y suma SHA-256. Evita guardar copias de datos reales en GitHub Actions o en el repositorio.
+- Guarda las exportaciones de D1 y las copias de los objetos del bucket en almacenamiento privado cifrado, con acceso y retención controlados. Conserva las claves de objeto del bucket y un inventario con tamaño y suma SHA-256. Evita guardar copias de datos reales en GitHub Actions o en el repositorio.
 - Verifica las copias en una D1 y un bucket de ensayo independientes. Comprueba que cada metadato restaurado apunta a un archivo recuperado y conserva el mismo contenido. Restaura producción únicamente como parte de una recuperación autorizada.
 - `bash scripts/restore-drill.sh` repite en CI un ensayo con datos ficticios, el esquema de D1 en SQLite y almacenes R2 locales independientes. No usa credenciales ni datos de producción.

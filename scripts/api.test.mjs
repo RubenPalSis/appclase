@@ -9,7 +9,7 @@ import { passwordRecord } from '../server/auth.ts';
 const origin = 'https://appclase.example';
 const migration = await readFile(new URL('../migrations/0001_initial.sql', import.meta.url), 'utf8');
 
-async function fixture(t) {
+async function fixture(t, config = {}) {
   const sqlite = new DatabaseSync(':memory:');
   t.after(() => sqlite.close());
   sqlite.exec(migration);
@@ -37,6 +37,7 @@ async function fixture(t) {
   sqlite.exec(await readFile(new URL('../migrations/0013_submission_attachments.sql', import.meta.url), 'utf8'));
   sqlite.exec(await readFile(new URL('../migrations/0014_password_resets.sql', import.meta.url), 'utf8'));
   sqlite.exec(await readFile(new URL('../migrations/0015_scheduled_lessons.sql', import.meta.url), 'utf8'));
+  sqlite.exec(await readFile(new URL('../migrations/0016_storage_quota.sql', import.meta.url), 'utf8'));
   sqlite.exec("INSERT INTO platform_administrators VALUES ('admin')");
   const sessions = new Map();
   for (const [index, user] of ['teacher','student','outside','other','admin'].entries()) {
@@ -52,6 +53,7 @@ async function fixture(t) {
       delete: key => objects.delete(key),
     },
     APP_ORIGIN: origin,
+    ...config,
     DB: {
       prepare(sql) {
         return { bind(...values) {
@@ -256,6 +258,54 @@ test('videoclases y PDF programados protegen metadatos y descarga', async t => {
   assert.equal(chunk.status,206);
   assert.equal(chunk.headers.get('content-range'),'bytes 4-7/12');
   assert.deepEqual(chunk.data,mp4.slice(4,8));
+});
+
+test('Supabase privado conserva los permisos, rangos y el límite de almacenamiento', async t => {
+  const key = 'sb_secret_prueba_ficticia';
+  const call = await fixture(t, {
+    DOCUMENTS: undefined, SUPABASE_URL: 'https://appclaseprueba.supabase.co',
+    SUPABASE_STORAGE_KEY: key, SUPABASE_BUCKET: 'appclase-documentos',
+  });
+  const objects = new Map();
+  const sent = [];
+  const mock = t.mock.method(globalThis, 'fetch', async (input, options) => {
+    const url = new URL(input);
+    assert.equal(url.origin,'https://appclaseprueba.supabase.co');
+    assert.equal(options.headers.get('apikey'),key);
+    assert.equal(options.headers.get('authorization'),null);
+    assert.equal(options.redirect,'error');
+    const path = url.pathname.replace('/storage/v1/object/','');
+    sent.push(options.method);
+    if (options.method === 'POST') {
+      assert.equal(options.headers.get('x-upsert'),'false');
+      objects.set(path, options.body);
+      return Response.json({Key:path}, {status:200});
+    }
+    assert.match(path,/^authenticated\/appclase-documentos\/course\/lessons\//);
+    const object = objects.get(path.replace('authenticated/',''));
+    const range = options.headers.get('range');
+    if (!range) return new Response(object);
+    assert.equal(range,'bytes=4-7');
+    return new Response(object.slice(4,8), {status:206,headers:{'Content-Range':'bytes 4-7/12'}});
+  });
+  const route = '/classes/course';
+  const video = Uint8Array.of(0,0,0,12,0x66,0x74,0x79,0x70,0,1,2,3);
+  const future = now() + 120;
+  const upload = route+'/lessons?title=Vídeo&name=clase.mp4&opens='+future;
+  assert.equal((await call(route,'teacher')).data.documents_enabled,true);
+  const saved = await call(upload,'teacher',video);
+  assert.equal(saved.status,200);
+  const endpoint = route+'/lessons/'+saved.data.id;
+  assert.equal((await call(endpoint,'student')).status,423);
+  assert.equal((await call(endpoint,'outside')).status,404);
+  assert.deepEqual(sent,['POST']);
+  await call(endpoint,'teacher',{opens:now()-1,hidden_until_open:false});
+  const range = await call(endpoint,'student',undefined,origin,{Range:'bytes=4-7'});
+  assert.equal(range.status,206);
+  assert.deepEqual(range.data,video.slice(4,8));
+  call.sqlite.prepare('INSERT INTO storage_reservations VALUES (?,?)').run('reserved',800_000_000-video.byteLength);
+  assert.equal((await call(upload,'teacher',video)).status,409);
+  assert.equal(mock.mock.callCount(),2);
 });
 
 test('gestión de usuarios, revocación sin reingreso y auditoría por centro', async t => {

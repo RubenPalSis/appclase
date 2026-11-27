@@ -1,3 +1,4 @@
+import { storageEnabled } from '../../server/storage.ts';
 import * as lessons from '../../server/lessons.ts';
 import { completePasswordReset, emailEnabled, requestPasswordReset } from '../../server/account-email.ts';
 import * as platform from '../../server/platform.ts';
@@ -20,7 +21,7 @@ const response = (data, status = 200) => Response.json(data, {
   status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' },
 });
 
-type Env = { DB: any; APP_ORIGIN?: string; DOCUMENTS?: any; RESEND_API_KEY?: string; ACCOUNT_EMAIL_FROM?: string };
+type Env = { DB: any; APP_ORIGIN?: string; DOCUMENTS?: any; SUPABASE_URL?: string; SUPABASE_STORAGE_KEY?: string; SUPABASE_BUCKET?: string; RESEND_API_KEY?: string; ACCOUNT_EMAIL_FROM?: string };
 export async function onRequest({ request, env }: { request: Request; env: Env }) {
   try {
     const url = new URL(request.url);
@@ -87,7 +88,7 @@ export async function onRequest({ request, env }: { request: Request; env: Env }
     if (section === 'students' && parts.length === 4 && parts[3] === 'import' && method === 'POST') {
       return response(await classes.importStudents(db, course, user, await jsonBody(request)));
     }
-    if (parts.length === 2 && method === 'GET') return response({ ...course, documents_enabled: Boolean(env.DOCUMENTS) });
+    if (parts.length === 2 && method === 'GET') return response({ ...course, documents_enabled: storageEnabled(env) });
     if (section === 'topics' && parts.length === 4 && method === 'POST') {
       return response(await materials.moveTopic(db, course, parts[3], await jsonBody(request)));
     }
@@ -117,7 +118,7 @@ export async function onRequest({ request, env }: { request: Request; env: Env }
       }
     }
     if (parts.length === 4 && section === 'assignments' && method === 'GET') {
-      return response(await learning.assignmentDetail(db, course, user, parts[3], Boolean(env.DOCUMENTS)));
+      return response(await learning.assignmentDetail(db, course, user, parts[3], storageEnabled(env)));
     }
     if (section === 'assignments' && parts[4] === 'attachment') {
       if (parts.length === 5 && method === 'POST') return response(await files.attachSubmission(env, course, user, parts[3], request, url.searchParams.get('name')));
