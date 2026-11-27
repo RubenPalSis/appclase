@@ -33,6 +33,7 @@ async function fixture(t) {
     INSERT INTO class_students VALUES ('course','student'),('course','other');
   `);
   sqlite.exec(await readFile(new URL('../migrations/0011_platform_access.sql', import.meta.url), 'utf8'));
+  sqlite.exec(await readFile(new URL('../migrations/0012_subject_colors.sql', import.meta.url), 'utf8'));
   sqlite.exec("INSERT INTO platform_administrators VALUES ('admin')");
   const sessions = new Map();
   for (const [index, user] of ['teacher','student','outside','other','admin'].entries()) {
@@ -147,6 +148,16 @@ test('entregas, notas privadas y asistencia individual', async t => {
   const [{id}] = (await call(route+'/assignments','student')).data;
   const endpoint = route+'/assignments/'+id;
   assert.equal((await call(endpoint+'/deliver','student',{body:'Respuesta privada'})).status, 200);
+  assert.equal((await call(endpoint,'outside')).status, 404);
+  assert.equal((await call(endpoint,'student')).data.task.answer, 'Respuesta privada');
+  const otherDetail = (await call(endpoint,'other')).data;
+  assert.equal(otherDetail.task.answer, null);
+  assert.equal(otherDetail.roster, undefined);
+  const {roster} = (await call(endpoint,'teacher')).data;
+  assert.equal(roster.find(row => row.user_id === 'student').body, 'Respuesta privada');
+  assert.equal(roster.find(row => row.user_id === 'other').submitted, null);
+  assert.equal((await call(route+'/assignments','teacher')).data[0].pending_reviews, 1);
+  assert.equal((await call(route+'/assignments','student')).data[0].pending_reviews, null);
   assert.equal((await call(endpoint+'/reviews','other')).status, 403);
   assert.equal((await call(endpoint+'/reviews','teacher',{user_id:'student',score:11,feedback:''})).status, 400);
   assert.equal((await call(endpoint+'/reviews','teacher',{user_id:'student',score:9,feedback:'Buen trabajo'})).status, 200);
@@ -206,6 +217,27 @@ test('documentos privados, validación de formato y autorización de subida', as
   assert.equal((await call(route+'/'+id,'outside')).status, 404);
   assert.equal((await call(route,'student')).data[0].name, 'temario.pdf');
   assert.deepEqual((await call(route+'/'+id,'student')).data, pdf);
+});
+
+test('el color se comparte por asignatura y centro y solo el personal puede cambiarlo', async t => {
+  const call = await fixture(t);
+  const colorRoute = '/classes/course/subject-color';
+  assert.equal((await call('/classes/course', 'student')).data.subject_color, null);
+  assert.equal((await call(colorRoute, 'student', {subject_color:'#445566'})).status, 403);
+  assert.equal((await call(colorRoute, 'outside', {subject_color:'#445566'})).status, 404);
+  assert.equal((await call(colorRoute, 'teacher', {subject_color:'red'})).status, 400);
+
+  const data = {name:'Otro grupo', subject:'materia', academic_year:'2026', subject_color:'#445566'};
+  const second = await call('/classes', 'teacher', {...data, org_id:'center'});
+  assert.equal(second.status, 200);
+  assert.equal((await call('/classes/course', 'student')).data.subject_color, '#445566');
+
+  const outside = await call('/classes', 'outside', {...data, org_id:'different', subject_color:'#112233'});
+  assert.equal(outside.status, 200);
+  assert.equal((await call(colorRoute, 'teacher', {subject_color:'#Aa2244'})).status, 200);
+  const courses = (await call('/classes', 'teacher')).data;
+  assert.deepEqual(courses.map(course => course.subject_color), ['#aa2244','#aa2244']);
+  assert.equal((await call('/classes/' + outside.data.id, 'outside')).data.subject_color, '#112233');
 });
 
 test('calendario acotado, exportación ICS y protección contra saltos de línea', async t => {

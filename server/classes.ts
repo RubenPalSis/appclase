@@ -5,15 +5,17 @@ export const organizations = (db, user) => list(db, `
   WHERE m.user_id=? AND m.active=1 ORDER BY o.name LIMIT 100`, user.id);
 
 export const visibleClasses = (db, user) => list(db, `
-  SELECT c.*,o.name AS organization,m.role FROM memberships m
+  SELECT c.*,sc.color AS subject_color,o.name AS organization,m.role FROM memberships m
   JOIN classes c ON c.org_id=m.org_id JOIN organizations o ON o.id=c.org_id
+  LEFT JOIN subject_colors sc ON sc.org_id=c.org_id AND sc.subject_key=LOWER(TRIM(c.subject))
   WHERE m.user_id=? AND m.active=1 AND (m.role='admin' OR (m.role='teacher' AND c.teacher_id=m.user_id)
     OR (m.role='student' AND EXISTS(SELECT 1 FROM class_students s WHERE s.class_id=c.id AND s.user_id=m.user_id)))
   ORDER BY c.archived,c.name,c.id LIMIT 100`, user.id);
 
 export async function classAccess(db, id, user) {
   const course = await first(db, `
-    SELECT c.*,m.role FROM classes c JOIN memberships m ON m.org_id=c.org_id AND m.user_id=? AND m.active=1
+    SELECT c.*,sc.color AS subject_color,m.role FROM classes c JOIN memberships m ON m.org_id=c.org_id AND m.user_id=? AND m.active=1
+    LEFT JOIN subject_colors sc ON sc.org_id=c.org_id AND sc.subject_key=LOWER(TRIM(c.subject))
     WHERE c.id=? AND (m.role='admin' OR (m.role='teacher' AND c.teacher_id=m.user_id)
       OR (m.role='student' AND EXISTS(SELECT 1 FROM class_students s WHERE s.class_id=c.id AND s.user_id=m.user_id)))`,
   user.id, id);
@@ -34,12 +36,34 @@ export async function createClass(db, user, data) {
   const membership = await first(db, 'SELECT role FROM memberships WHERE org_id=? AND user_id=? AND active=1', org, user.id);
   if (!['admin','teacher'].includes(membership?.role)) throw new HttpError(403, 'No puedes crear clases en este centro.');
   const id = crypto.randomUUID();
+  const subject = text(data.subject, 120);
+  const color = data.subject_color === undefined ? null : subjectColor(data.subject_color);
   await db.batch([
+    ...(color ? [statement(db, `INSERT INTO subject_colors VALUES (?,LOWER(TRIM(?)),?)
+      ON CONFLICT(org_id,subject_key) DO NOTHING`, org, subject, color)] : []),
     statement(db, 'INSERT INTO classes (id,org_id,teacher_id,name,subject,description,academic_year) VALUES (?,?,?,?,?,?,?)',
-      id, org, user.id, text(data.name, 120), text(data.subject, 120), text(data.description, 2000, 0), text(data.academic_year, 30)),
+      id, org, user.id, text(data.name, 120), subject, text(data.description ?? '', 2000, 0), text(data.academic_year, 30)),
     audit(db, org, user.id, 'class.created', id),
   ]);
   return { id };
+}
+
+function subjectColor(value) {
+  if (typeof value !== 'string' || !/^#[0-9a-f]{6}$/i.test(value)) {
+    throw new HttpError(400, 'Elige un color válido para la asignatura.');
+  }
+  return value.toLowerCase();
+}
+
+export async function updateSubjectColor(db, course, user, data) {
+  requireStaff(course);
+  const color = subjectColor(data.subject_color);
+  await db.batch([
+    statement(db, `INSERT INTO subject_colors VALUES (?,LOWER(TRIM(?)),?)
+      ON CONFLICT(org_id,subject_key) DO UPDATE SET color=excluded.color`, course.org_id, course.subject, color),
+    audit(db, course.org_id, user.id, 'class.subject_color.updated', course.id),
+  ]);
+  return { subject_color: color };
 }
 
 export async function invite(db, course, user) {
