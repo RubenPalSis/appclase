@@ -31,6 +31,8 @@ async function fixture(t) {
       VALUES ('course','center','teacher','Clase','Materia','','2026');
     INSERT INTO class_students VALUES ('course','student'),('course','other');
   `);
+  sqlite.exec(await readFile(new URL('../migrations/0011_platform_access.sql', import.meta.url), 'utf8'));
+  sqlite.exec("INSERT INTO platform_administrators VALUES ('admin')");
   const sessions = new Map();
   for (const [index, user] of ['teacher','student','outside','other','admin'].entries()) {
     const value = String(index + 1).repeat(64);
@@ -317,4 +319,21 @@ test('registro propio, inicio de sesión y asociaciones de roles', async t => {
   assert.equal((await call(endpoint,'admin',{user_id:id,role:'student',active:false})).status,200);
   assert.equal(call.sqlite.prepare('SELECT active FROM students WHERE user_id=?').get(id).active,0);
   assert.equal(call.sqlite.prepare('SELECT active FROM teachers WHERE user_id=?').get(id),undefined);
+});
+
+test('administración global y primer acceso docente con código del centro', async t => {
+  const call = await fixture(t);
+  assert.equal((await call('/organizations','teacher',{name:'Aula'})).status,403);
+  const {data:center} = await call('/organizations','admin',{name:'Centro Nuevo'});
+  assert.match(center.access_code,/^[A-Z2-9]{4}$/);
+  const path = '/organizations/'+center.id+'/teachers';
+  const account = {name:'Docente nuevo',email:'nuevo@example.com'};
+  assert.equal((await call(path,'teacher',account)).status,404);
+  const {data:invitation} = await call(path,'admin',account);
+  assert.equal(invitation.access_code, center.access_code);
+  const credentials = {email:account.email,password:invitation.password};
+  assert.equal((await call('/auth/login',null,credentials)).status,401);
+  assert.equal((await call('/auth/login',null,{...credentials,center_code:center.access_code})).status,204);
+  const role = call.sqlite.prepare('SELECT role FROM memberships JOIN users ON users.id=memberships.user_id WHERE email=?').get(account.email);
+  assert.equal(role.role,'teacher');
 });
