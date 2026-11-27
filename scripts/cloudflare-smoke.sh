@@ -23,7 +23,7 @@ const hash = createHash('sha256').update(token).digest('base64url');
 const folder = process.env.APPCLASE_SMOKE_DIR;
 await writeFile(folder+'/seed.sql', `
   INSERT INTO users VALUES ('smoke','smoke@example.test','Docente de prueba');
-  INSERT INTO organizations VALUES ('smoke','Centro de prueba');
+  INSERT INTO organizations (id,name) VALUES ('smoke','Centro de prueba');
   INSERT INTO memberships (org_id,user_id,role) VALUES ('smoke','smoke','teacher');
   INSERT INTO sessions VALUES ('${hash}','smoke',unixepoch()+600);
 `);
