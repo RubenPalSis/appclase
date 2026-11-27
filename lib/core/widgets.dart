@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
-import "api.dart";
+import 'api.dart';
 
 class LoadError extends StatelessWidget {
   const LoadError(this.message, this.retry, {super.key});
@@ -115,11 +115,12 @@ class _EditFieldsDialogState extends State<EditFieldsDialog> {
       });
       if (mounted) Navigator.of(context).pop();
     } catch (exception) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           saving = false;
           error = errorMessage(exception);
         });
+      }
     }
   }
 

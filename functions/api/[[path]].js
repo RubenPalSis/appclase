@@ -1,3 +1,4 @@
+import * as administration from '../../server/administration.js';
 import { currentUser, logout, oauth } from '../../server/auth.js';
 import * as classes from '../../server/classes.js';
 import * as exams from '../../server/exams.js';
@@ -28,6 +29,17 @@ export async function onRequest({ request, env }) {
     if (url.pathname === '/api/classes') return response(method === 'GET'
       ? await classes.visibleClasses(db, user)
       : await classes.createClass(db, user, await jsonBody(request)));
+    if (parts[0] === 'organizations' && parts.length === 3) {
+      const org = await administration.requireAdmin(db, user, parts[1]);
+      switch (parts[2]) {
+        case 'members': return response(method === 'GET'
+          ? await administration.members(db, org.id)
+          : await administration.updateMembership(db, user, org.id, await jsonBody(request)));
+        case 'audit': if (method === 'GET') return response(await administration.logs(db, org.id)); break;
+        case 'settings': return response(method === 'GET'
+          ? org : await administration.rename(db, user, org.id, await jsonBody(request)));
+      }
+    }
     if (parts[0] !== 'classes' || !parts[1]) throw new HttpError(404, 'Ruta no disponible.');
     const course = await classes.classAccess(db, parts[1], user);
     const section = parts[2];

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:web/web.dart' as web;
@@ -198,6 +198,18 @@ class HomePage extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 24),
+          for (final org in organizations.where(
+            (org) => org['role'] == 'admin',
+          ))
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.admin_panel_settings_outlined),
+                title: Text(org['name'] as String),
+                subtitle: const Text('Administrar centro'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => context.push('/centros/${org['id']}'),
+              ),
+            ),
           Text('Mis clases', style: theme.textTheme.headlineSmall),
           const SizedBox(height: 10),
           ref

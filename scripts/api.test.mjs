@@ -13,18 +13,19 @@ async function fixture(t) {
   t.after(() => sqlite.close());
   sqlite.exec(migration);
   sqlite.exec(await readFile(new URL("../migrations/0002_exams.sql", import.meta.url), "utf8"));
+  sqlite.exec(await readFile(new URL('../migrations/0003_membership_status.sql', import.meta.url), 'utf8'));
   sqlite.exec(`
     INSERT INTO users VALUES ('teacher','t@example.com','Profe'),('student','s@example.com','Alumna'),
-      ('outside','x@example.com','Externo'),('other','o@example.com','Otro alumno');
+      ('outside','x@example.com','Externo'),('other','o@example.com','Otro alumno'),('admin','a@example.com','Admin');
     INSERT INTO organizations VALUES ('center','Centro'),('different','Otro centro');
-    INSERT INTO memberships VALUES ('center','teacher','teacher'),('center','student','student'),
-      ('center','other','student'),('different','outside','teacher');
+    INSERT INTO memberships (org_id,user_id,role) VALUES ('center','teacher','teacher'),('center','student','student'),
+      ('center','other','student'),('different','outside','teacher'),('center','admin','admin');
     INSERT INTO classes(id,org_id,teacher_id,name,subject,description,academic_year)
       VALUES ('course','center','teacher','Clase','Materia','','2026');
     INSERT INTO class_students VALUES ('course','student'),('course','other');
   `);
   const sessions = new Map();
-  for (const [index, user] of ['teacher','student','outside','other'].entries()) {
+  for (const [index, user] of ['teacher','student','outside','other','admin'].entries()) {
     const value = String(index + 1).repeat(64);
     sqlite.prepare('INSERT INTO sessions VALUES (?,?,?)').run(await hash(value), user, now() + 1000);
     sessions.set(user, value);
@@ -148,4 +149,19 @@ test('exámenes temporizados, intentos y respuestas correctas solo en el servido
   assert.equal((await call(endpoint+'/start','student',{})).status, 409);
   assert.equal((await call(endpoint+'/attempts','student')).data[0].score, null);
   assert.equal((await call(endpoint+'/attempts','teacher')).data[0].score, 1);
+});
+
+test('gestión de usuarios, revocación sin reingreso y auditoría por centro', async t => {
+  const call = await fixture(t);
+  const endpoint = '/organizations/center/members';
+  assert.equal((await call(endpoint,'teacher')).status, 404);
+  assert.equal((await call('/organizations/different/members','admin')).status, 404);
+  assert.equal((await call(endpoint,'admin',{email:'a@example.com',role:'teacher',active:false})).status, 403);
+  const {data: {code}} = await call('/classes/course/invite','teacher',{});
+  assert.equal((await call(endpoint,'admin',{email:'s@example.com',role:'student',active:false})).status, 200);
+  assert.equal((await call('/classes/course','student')).status, 404);
+  assert.equal((await call('/join','student',{code})).status, 409);
+  assert.ok((await call('/organizations/center/audit','admin')).data.some(item => item.action === 'membership.disabled'));
+  assert.equal((await call(endpoint,'admin',{email:'s@example.com',role:'student',active:true})).status, 200);
+  assert.equal((await call('/classes/course','student')).status, 200);
 });

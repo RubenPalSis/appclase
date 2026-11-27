@@ -2,18 +2,18 @@ import { HttpError, first, list, now, run, statement, text, token } from './secu
 
 export const organizations = (db, user) => list(db, `
   SELECT o.id,o.name,m.role FROM memberships m JOIN organizations o ON o.id=m.org_id
-  WHERE m.user_id=? ORDER BY o.name LIMIT 100`, user.id);
+  WHERE m.user_id=? AND m.active=1 ORDER BY o.name LIMIT 100`, user.id);
 
 export const visibleClasses = (db, user) => list(db, `
   SELECT c.*,o.name AS organization,m.role FROM memberships m
   JOIN classes c ON c.org_id=m.org_id JOIN organizations o ON o.id=c.org_id
-  WHERE m.user_id=? AND (m.role='admin' OR (m.role='teacher' AND c.teacher_id=m.user_id)
+  WHERE m.user_id=? AND m.active=1 AND (m.role='admin' OR (m.role='teacher' AND c.teacher_id=m.user_id)
     OR (m.role='student' AND EXISTS(SELECT 1 FROM class_students s WHERE s.class_id=c.id AND s.user_id=m.user_id)))
   ORDER BY c.archived,c.name,c.id LIMIT 100`, user.id);
 
 export async function classAccess(db, id, user) {
   const course = await first(db, `
-    SELECT c.*,m.role FROM classes c JOIN memberships m ON m.org_id=c.org_id AND m.user_id=?
+    SELECT c.*,m.role FROM classes c JOIN memberships m ON m.org_id=c.org_id AND m.user_id=? AND m.active=1
     WHERE c.id=? AND (m.role='admin' OR (m.role='teacher' AND c.teacher_id=m.user_id)
       OR (m.role='student' AND EXISTS(SELECT 1 FROM class_students s WHERE s.class_id=c.id AND s.user_id=m.user_id)))`,
   user.id, id);
@@ -31,7 +31,7 @@ export const audit = (db, org, actor, action, target) =>
 
 export async function createClass(db, user, data) {
   const org = text(data.org_id, 80);
-  const membership = await first(db, 'SELECT role FROM memberships WHERE org_id=? AND user_id=?', org, user.id);
+  const membership = await first(db, 'SELECT role FROM memberships WHERE org_id=? AND user_id=? AND active=1', org, user.id);
   if (!['admin','teacher'].includes(membership?.role)) throw new HttpError(403, 'No puedes crear clases en este centro.');
   const id = crypto.randomUUID();
   await db.batch([
@@ -66,10 +66,10 @@ export async function joinClass(db, user, data) {
   const guard = `EXISTS (SELECT 1 FROM invitations i JOIN classes c ON c.id=i.class_id
     WHERE i.code=? AND i.class_id=? AND i.expires>? AND c.archived=0)`;
   const [, enrolled] = await db.batch([
-    statement(db, `INSERT OR IGNORE INTO memberships SELECT ?,?,'student' WHERE ${guard}`,
+    statement(db, `INSERT OR IGNORE INTO memberships (org_id,user_id,role) SELECT ?,?,'student' WHERE ${guard}`,
       invitation.org_id, user.id, code, invitation.id, timestamp),
     statement(db, `INSERT INTO class_students SELECT ?,? WHERE ${guard}
-      AND EXISTS (SELECT 1 FROM memberships WHERE org_id=? AND user_id=? AND role='student')
+      AND EXISTS (SELECT 1 FROM memberships WHERE org_id=? AND user_id=? AND role='student' AND active=1)
       ON CONFLICT(class_id,user_id) DO UPDATE SET user_id=excluded.user_id`,
       invitation.id, user.id, code, invitation.id, timestamp, invitation.org_id, user.id),
   ]);

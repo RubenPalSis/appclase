@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api.dart';
@@ -362,11 +362,12 @@ class _AttemptScreenState extends State<AttemptScreen> {
   @override
   void initState() {
     super.initState();
-    if (writable)
+    if (writable) {
       timer = Timer.periodic(const Duration(seconds: 1), (_) {
         setState(() {});
         if (remaining == 0) timer?.cancel();
       });
+    }
   }
 
   @override
@@ -383,11 +384,12 @@ class _AttemptScreenState extends State<AttemptScreen> {
     });
     try {
       await widget.save(Record.of(answers), submit);
-      if (mounted)
+      if (mounted) {
         setState(() {
           dirty = false;
           submitted = submit;
         });
+      }
     } catch (exception) {
       if (mounted) setState(() => error = errorMessage(exception));
     } finally {

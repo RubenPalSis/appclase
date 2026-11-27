@@ -6,6 +6,7 @@ Plataforma educativa web instalable escrita en Flutter y Dart. La aplicación y 
 
 - Google OAuth con PKCE, correo verificado y sesiones HttpOnly. Revocación de la sesión al cerrar sesión.
 - Roles de administrador, profesor y alumno por centro. El administrador puede acceder a las clases del centro. El profesor solo accede a las clases de las que es responsable. El alumno necesita estar matriculado.
+- Administración de accesos de profesores y alumnos, nombre de centro e historial administrativo.
 - Creación y archivo de clases, invitaciones revocables vía rotación con caducidad de siete días y listado de alumnos.
 - Tablón de anuncios y materiales mediante enlaces HTTPS.
 - Tareas individuales con fecha límite, entregas de texto o enlace, corrección y feedback privado.
@@ -13,7 +14,7 @@ Plataforma educativa web instalable escrita en Flutter y Dart. La aplicación y 
 - Registro de asistencia por fecha y consulta privada por alumno.
 - Interfaz adaptable y modos de color. El service worker guarda solo el código y los recursos estáticos. La API académica requiere conexión.
 
-La versión actual requiere más desarrollo para cubrir todos los requisitos. Faltan la administración de centros y usuarios desde la interfaz, el acceso por correo y contraseña, archivos privados con R2, temario jerárquico, comentarios, el cuaderno completo, calendario, mensajería, push, sincronización académica sin conexión, los estilos adicionales de examen y los flujos de exportación y eliminación de datos personales. Las listas devuelven hasta 100 registros y necesitan paginación para centros con más volumen. La instalación en distintos navegadores, la accesibilidad y los flujos OAuth y D1 remotos deben validarse antes de un piloto. No utilizar datos reales de alumnado hasta completar esa revisión y las medidas de privacidad del centro.
+La versión actual requiere más desarrollo para cubrir todos los requisitos. Faltan la creación de centros desde la interfaz, el acceso por correo y contraseña, archivos privados con R2, temario jerárquico, comentarios, el cuaderno completo, calendario, mensajería, push, sincronización académica sin conexión, los estilos adicionales de examen y los flujos de exportación y eliminación de datos personales. Las listas devuelven hasta 100 registros y necesitan paginación para centros con más volumen. La instalación en distintos navegadores, la accesibilidad y los flujos OAuth y D1 remotos deben validarse antes de un piloto. No utilizar datos reales de alumnado hasta completar esa revisión y las medidas de privacidad del centro.
 
 ## Código y datos
 

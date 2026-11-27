@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -68,11 +68,12 @@ class _ClassPageState extends ConsumerState<ClassPage> {
                     if (dialog.mounted) Navigator.pop(dialog);
                     if (mounted) showMessage(context, 'Enlace copiado');
                   } catch (_) {
-                    if (mounted)
+                    if (mounted) {
                       showMessage(
                         context,
                         'No se pudo copiar el enlace. Puedes seleccionar el código.',
                       );
+                    }
                   }
                 },
                 child: const Text('Copiar enlace'),

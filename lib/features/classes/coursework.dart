@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api.dart';
@@ -113,8 +113,9 @@ class Rows extends ConsumerWidget {
 
 int number(String? input) {
   final value = int.tryParse(input ?? '');
-  if (value == null)
+  if (value == null) {
     throw const ApiError(400, 'Introduce un número entero válido.');
+  }
   return value;
 }
 

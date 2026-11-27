@@ -1,5 +1,4 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +7,7 @@ import 'core/api.dart';
 import 'core/widgets.dart';
 import 'features/access/access.dart';
 import 'features/classes/class_page.dart';
+import 'features/organizations/organization_page.dart';
 
 void main() {
   usePathUrlStrategy();
@@ -19,6 +19,11 @@ final router = GoRouter(
     GoRoute(
       path: '/',
       builder: (_, _) => const SessionGate(child: HomePage()),
+    ),
+    GoRoute(
+      path: '/centros/:id',
+      builder: (_, state) =>
+          SessionGate(child: OrganizationPage(id: state.pathParameters['id']!)),
     ),
     GoRoute(
       path: '/clases/:id',
