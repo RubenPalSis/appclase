@@ -3,7 +3,7 @@ import { HttpError, integer, list, run } from './security.js';
 const categories = ['announcement','material','assignment','exam','grade','message'];
 const visible = `FROM notifications n JOIN classes c ON c.id=n.class_id
   JOIN memberships m ON m.org_id=c.org_id AND m.user_id=?1 AND m.active=1
-  WHERE (
+  WHERE n.created<=unixepoch() AND (
      (m.role='admin') OR (m.role='teacher' AND c.teacher_id=?1)
      OR (m.role='student' AND EXISTS(SELECT 1 FROM class_students s WHERE s.class_id=c.id AND s.user_id=?1))
   ) AND (n.recipient_id=?1 OR (n.recipient_id IS NULL AND m.role='student'))

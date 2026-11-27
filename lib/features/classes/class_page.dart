@@ -7,6 +7,7 @@ import 'package:web/web.dart' as web;
 import '../../core/api.dart';
 import '../../core/widgets.dart';
 import '../../main.dart' show ThemeButton;
+import 'board_page.dart';
 import 'calendar_page.dart';
 import 'coursework.dart';
 import 'documents_page.dart';
@@ -126,21 +127,7 @@ class _ClassPageState extends ConsumerState<ClassPage> {
               ? sections.indexOf(selected)
               : 0;
           final body = switch (sections[index]) {
-            ClassSection.board => RecordsPage(
-              path: '$path/posts',
-              empty: 'Todavía no hay publicaciones.',
-              action: writable ? 'Publicar anuncio' : null,
-              fields: [field('body', 'Anuncio', 4000)],
-              leading: Icons.campaign_outlined,
-              row: (item) => (
-                title: item['body'] as String,
-                subtitle:
-                    '${item['author']} · ${dateLabel(context, item['created'] as int)}',
-                tap: null,
-              ),
-              header:
-                  '${course['subject']} · ${course['academic_year']}\n${course['description']}',
-            ),
+            ClassSection.board => BoardPage(course: course),
             ClassSection.materials => RecordsPage(
               path: '$path/materials',
               empty: 'Aún no se han añadido materiales.',

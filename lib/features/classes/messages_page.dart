@@ -49,11 +49,12 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
                           .contains(filter),
                     )
                     .toList();
-                if (filtered.isEmpty)
+                if (filtered.isEmpty) {
                   return const Padding(
                     padding: EdgeInsets.symmetric(vertical: 12),
                     child: Text('No hay conversaciones disponibles.'),
                   );
+                }
                 return Column(
                   children: [
                     for (final thread in filtered)
@@ -78,8 +79,9 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
                                 ),
                               ),
                             );
-                            if (mounted)
+                            if (mounted) {
                               ref.invalidate(rowsProvider(widget.path));
+                            }
                           },
                         ),
                       ),
@@ -207,11 +209,12 @@ class _ThreadPageState extends ConsumerState<ThreadPage> {
                                 '${widget.path}/report',
                                 {...data, 'id': message['sequence']},
                               );
-                              if (context.mounted)
+                              if (context.mounted) {
                                 showMessage(
                                   context,
                                   'Mensaje comunicado al centro.',
                                 );
+                              }
                             },
                           ),
                         ),

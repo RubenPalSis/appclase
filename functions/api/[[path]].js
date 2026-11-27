@@ -1,3 +1,4 @@
+import * as board from '../../server/board.js';
 import * as notices from '../../server/notifications.js';
 import * as messages from '../../server/messages.js';
 import * as calendar from '../../server/calendar.js';
@@ -8,7 +9,7 @@ import { currentUser, logout, oauth } from '../../server/auth.js';
 import * as classes from '../../server/classes.js';
 import * as exams from '../../server/exams.js';
 import * as learning from '../../server/learning.js';
-import { HttpError, jsonBody, list } from '../../server/security.js';
+import { HttpError, jsonBody } from '../../server/security.js';
 
 const response = (data, status = 200) => Response.json(data, {
   status, headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' },
@@ -65,6 +66,13 @@ export async function onRequest({ request, env }) {
         ? await files.documents(db, course)
         : await files.upload(env, course, request, url.searchParams.get('name')));
     }
+    if (section === 'posts' && parts.length === 5) {
+      const [, , , id, action] = parts;
+      if (action === 'comments') return response(method === 'GET'
+        ? await board.remarks(db, course, user, id)
+        : await board.comment(db, course, user, id, await jsonBody(request)));
+      if (method === 'POST') return response(await board.change(db, course, user, id, action, await jsonBody(request)));
+    }
     if (section === 'messages') {
       if (parts.length === 3 && method === 'GET') return response(await messages.threads(db, course, user));
       if (parts.length === 4) return response(method === 'GET'
@@ -95,8 +103,7 @@ export async function onRequest({ request, env }) {
       switch (section) {
         case 'calendar': return response(await calendar.events(db, course, url));
         case 'grades': return response(await grades.gradeRows(db, course, user));
-        case 'posts': return response(await list(db, `SELECT p.*,u.name AS author FROM posts p
-          JOIN users u ON u.id=p.author_id WHERE p.class_id=? ORDER BY p.created DESC,p.id DESC LIMIT 100`, course.id));
+        case 'posts': return response(await board.board(db, course, user));
         case 'materials': return response(await list(db, 'SELECT * FROM materials WHERE class_id=? ORDER BY created DESC,id DESC LIMIT 100', course.id));
         case 'exams': return response(await exams.examList(db, course, user));
         case 'assignments': return response(await learning.assignments(db, course, user));
@@ -108,7 +115,8 @@ export async function onRequest({ request, env }) {
       const data = await jsonBody(request);
       switch (section) {
         case 'calendar': return response(await calendar.addEvent(db, course, data));
-        case 'posts': return response(await classes.createPost(db, course, user, data));
+        case 'board-settings': return response(await board.permissions(db, course, user, data));
+        case 'posts': return response(await board.publish(db, course, user, data));
         case 'materials': return response(await classes.createMaterial(db, course, data));
         case 'exams': return response(await exams.createExam(db, course, data));
         case 'assignments': return response(await learning.addAssignment(db, course, data));

@@ -87,12 +87,6 @@ export async function archive(db, course, user, data) {
   return {};
 }
 
-export async function createPost(db, course, user, data) {
-  requireStaff(course);
-  await run(db, 'INSERT INTO posts VALUES (?,?,?,?,?)', crypto.randomUUID(), course.id, user.id, text(data.body, 4000), now());
-  return {};
-}
-
 export async function createMaterial(db, course, data) {
   requireStaff(course);
   let url;

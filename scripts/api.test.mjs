@@ -18,6 +18,7 @@ async function fixture(t) {
   sqlite.exec(await readFile(new URL('../migrations/0005_calendar.sql', import.meta.url), 'utf8'));
   sqlite.exec(await readFile(new URL('../migrations/0006_messages.sql', import.meta.url), 'utf8'));
   sqlite.exec(await readFile(new URL('../migrations/0007_notifications.sql', import.meta.url), 'utf8'));
+  sqlite.exec(await readFile(new URL('../migrations/0008_board.sql', import.meta.url), 'utf8'));
   sqlite.exec(`
     INSERT INTO users VALUES ('teacher','t@example.com','Profe'),('student','s@example.com','Alumna'),
       ('outside','x@example.com','Externo'),('other','o@example.com','Otro alumno'),('admin','a@example.com','Admin');
@@ -250,4 +251,22 @@ test('notificaciones privadas, leídas y filtrado por preferencias', async t => 
   assert.equal((await call('/notifications','student')).data.length, 1);
   await call('/notifications/preferences','student',{category:'announcement',enabled:true});
   assert.equal((await call('/notifications','student')).data.length, 2);
+});
+
+test('tablón con permisos de alumnado, programación y moderación', async t => {
+  const call = await fixture(t);
+  const route = '/classes/course';
+  await call(route+'/posts','teacher',{body:'Programado',publish_at:now()+120});
+  assert.deepEqual((await call(route+'/posts','student')).data, []);
+  assert.deepEqual((await call('/notifications','student')).data, []);
+  assert.equal((await call(route+'/board-settings','teacher',{student_posts:true,student_comments:true})).status, 200);
+  assert.equal((await call(route+'/posts','student',{body:'Participación'})).status, 200);
+  assert.equal((await call(route+'/posts','student',{body:'Fijado',pinned:true})).status, 403);
+  const [{id}] = (await call(route+'/posts','student')).data;
+  assert.equal((await call(route+'/posts/'+id+'/comments','other',{body:'Respuesta'})).status, 200);
+  assert.equal((await call(route+'/posts/'+id+'/pin','student',{})).status, 403);
+  assert.equal((await call(route+'/posts/'+id+'/pin','teacher',{})).status, 200);
+  assert.equal((await call(route+'/posts/'+id+'/edit','other',{body:'Intento'})).status, 403);
+  assert.equal((await call(route+'/posts/'+id+'/delete','teacher',{})).status, 200);
+  assert.equal((await call(route+'/posts/'+id+'/comments','other')).status, 404);
 });
