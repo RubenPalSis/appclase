@@ -1,7 +1,7 @@
 import { HttpError, first, list, now, statement, text, token } from './security.js';
 
 export const organizations = (db, user) => list(db, `
-  SELECT o.id,o.name,m.role FROM memberships m JOIN organizations o ON o.id=m.org_id
+  SELECT o.id,o.name,m.role,CASE WHEN m.role IN ('teacher','admin') THEN o.access_code END AS access_code FROM memberships m JOIN organizations o ON o.id=m.org_id
   WHERE m.user_id=? AND m.active=1 ORDER BY o.name LIMIT 100`, user.id);
 
 export const visibleClasses = (db, user) => list(db, `
