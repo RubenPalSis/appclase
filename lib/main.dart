@@ -86,7 +86,11 @@ class SessionGate extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) => ref
       .watch(sessionProvider)
       .when(
-        data: (session) => session == null ? const AccessPage() : child,
+        data: (session) {
+          if (session == null) return const AccessPage();
+          if ((session['user'] as Record)['must_change'] == 1) return const ActivateAccountPage();
+          return child;
+        },
         loading: () =>
             const Scaffold(body: Center(child: CircularProgressIndicator())),
         error: (error, _) => Scaffold(
@@ -107,5 +111,28 @@ class ThemeButton extends ConsumerWidget {
     onPressed: () =>
         ref.read(themeProvider.notifier).toggle(Theme.of(context).brightness),
     icon: const Icon(Icons.contrast_rounded),
+  );
+}
+
+class ActivateAccountPage extends ConsumerWidget {
+  const ActivateAccountPage({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => Scaffold(
+    appBar: AppBar(title: const Text('Activa tu cuenta docente')),
+    body: PageContent(children: [
+      const Text('Elige una contraseña nueva de al menos 12 caracteres para acceder a tu centro.'),
+      const SizedBox(height: 16),
+      FilledButton(
+        onPressed: () => editFields(context, title: 'Nueva contraseña',
+          fields: [field('password', 'Nueva contraseña', 128)],
+          save: (data) async {
+            await ref.read(apiProvider).post('/auth/activate', data);
+            ref.invalidate(sessionProvider);
+          },
+        ),
+        child: const Text('Establecer contraseña'),
+      ),
+    ]),
   );
 }
