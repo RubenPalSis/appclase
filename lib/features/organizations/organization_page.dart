@@ -89,6 +89,24 @@ class OrganizationPage extends ConsumerWidget {
     }
   }
 
+  Future<void> provision(BuildContext context, WidgetRef ref) async {
+    Record? invitation;
+    await editFields(context, title: 'Crear cuenta de profesor',
+      fields: [field('name', 'Nombre completo', 160), field('email', 'Correo electrónico', 254)],
+      save: (data) async {
+        invitation = await ref.read(apiProvider).post('/organizations/$id/teachers', data);
+        ref.invalidate(rowsProvider('/organizations/$id/members'));
+      },
+    );
+    final details = invitation;
+    if (!context.mounted || details == null) return;
+    await showDialog<void>(context: context, builder: (dialog) => AlertDialog(
+      title: const Text('Datos para el primer acceso'),
+      content: SelectableText("Nombre: ${details['name']}\nCorreo: ${details['email']}\nCódigo del centro: ${details['access_code']}\nContraseña temporal: ${details['password']}"),
+      actions: [TextButton(onPressed: () => Navigator.pop(dialog), child: const Text('Cerrar'))],
+    ));
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider).value;
@@ -119,8 +137,12 @@ class OrganizationPage extends ConsumerWidget {
                   runSpacing: 8,
                   children: [
                     FilledButton(
+                      onPressed: () => provision(context, ref),
+                      child: const Text('Crear profesor'),
+                    ),
+                    OutlinedButton(
                       onPressed: () => manage(context, ref, 'teacher'),
-                      child: const Text('Añadir profesor'),
+                      child: const Text('Vincular profesor existente'),
                     ),
                     OutlinedButton(
                       onPressed: () => manage(context, ref, 'student'),
