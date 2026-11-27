@@ -29,3 +29,20 @@ export function upcoming(db, user, week = false) {
     WHERE ?5=1 AND event.start<=?3 AND event.finish>?2
   ) ORDER BY date,id LIMIT ?4`, user.id, start, start + (week ? 7 : 30) * 86400, week ? 100 : 8, Number(week));
 }
+
+export async function pendingReviews(db, user) {
+  const items = await list(db, `WITH pending AS (
+    SELECT a.id,c.id AS class_id,c.name,a.title,a.due AS date,COUNT(*) AS pending
+    FROM memberships own JOIN classes c ON c.org_id=own.org_id AND c.archived=0
+    JOIN assignments a ON a.class_id=c.id
+    JOIN submissions s ON s.assignment_id=a.id AND s.score IS NULL
+    JOIN class_students cs ON cs.class_id=c.id AND cs.user_id=s.user_id
+    JOIN memberships learner ON learner.org_id=c.org_id AND learner.user_id=s.user_id
+      AND learner.active=1 AND learner.role='student'
+    WHERE own.user_id=? AND own.active=1
+      AND (own.role='admin' OR (own.role='teacher' AND c.teacher_id=own.user_id))
+    GROUP BY a.id,c.id,c.name,a.title,a.due
+  )
+  SELECT *,SUM(pending) OVER () AS total FROM pending ORDER BY date,id LIMIT 6`, user.id);
+  return { total: items[0]?.total ?? 0, items };
+}

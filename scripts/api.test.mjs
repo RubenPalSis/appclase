@@ -398,6 +398,23 @@ test('panel de próximas entregas respeta pertenencia y entregas realizadas', as
   assert.equal((await call('/dashboard/upcoming','teacher')).data.length, 1);
 });
 
+test('el panel cuenta solo entregas activas que el personal puede corregir', async t => {
+  const call = await fixture(t);
+  const path = '/classes/course/assignments';
+  await call(path,'teacher',{title:'Por corregir',body:'Texto',due:now()+60,points:10,allow_late:false});
+  const [task] = (await call(path,'student')).data;
+  await call(path+'/'+task.id+'/deliver','student',{body:'Respuesta'});
+  for (const role of ['student','other','outside']) {
+    assert.deepEqual((await call('/dashboard/reviews',role)).data,{total:0,items:[]});
+  }
+  const {total,items} = (await call('/dashboard/reviews','teacher')).data;
+  assert.equal(total,1);
+  assert.equal(items[0].id,task.id);
+  assert.equal(items[0].pending,1);
+  await call(path+'/'+task.id+'/reviews','teacher',{user_id:'student',score:0,feedback:''});
+  assert.deepEqual((await call('/dashboard/reviews','teacher')).data,{total:0,items:[]});
+});
+
 test('agenda semanal incluye eventos activos y limita el horizonte', async t => {
   const call = await fixture(t);
   const route = '/classes/course/calendar';

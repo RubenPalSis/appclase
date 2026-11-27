@@ -2,7 +2,7 @@ import * as lessons from '../../server/lessons.ts';
 import { completePasswordReset, emailEnabled, requestPasswordReset } from '../../server/account-email.ts';
 import * as platform from '../../server/platform.ts';
 import * as materials from '../../server/materials.ts';
-import { upcoming } from '../../server/dashboard.ts';
+import { pendingReviews, upcoming } from '../../server/dashboard.ts';
 import * as board from '../../server/board.ts';
 import * as notices from '../../server/notifications.ts';
 import * as messages from '../../server/messages.ts';
@@ -62,6 +62,7 @@ export async function onRequest({ request, env }: { request: Request; env: Env }
     if (url.pathname === '/api/notifications/preferences') return response(method === 'GET'
       ? await notices.preferences(db, user)
       : await notices.setPreference(db, user, await jsonBody(request)));
+    if (url.pathname === '/api/dashboard/reviews' && method === 'GET') return response(await pendingReviews(db, user));
     if (url.pathname === '/api/dashboard/upcoming' && method === 'GET') return response(await upcoming(db, user, url.searchParams.get('period') === 'week'));
     if (url.pathname === '/api/join' && method === 'POST') return response(await classes.joinClass(db, user, await jsonBody(request)));
     if (url.pathname === '/api/classes') return response(method === 'GET'

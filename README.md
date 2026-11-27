@@ -114,3 +114,10 @@ el flujo con cuentas de prueba antes de habilitarlos para el alumnado.
 Los enlaces caducan a los 30 minutos y se consumen una sola vez.
 
 En el aula, `Videoclases y PDF` admite PDF de hasta 16 MB y vídeos MP4 o WebM de hasta 48 MB con el bucket `DOCUMENTS` activo. Los vídeos se sirven con peticiones por rangos. El profesorado puede mostrar las videoclases, PDF y exámenes en Agenda con un candado u ocultarlos hasta la apertura. La API aplica estas reglas también a las descargas directas. La pestaña Mensajes conecta de forma privada al profesor responsable con cada alumno de la clase.
+
+### Copias y recuperación
+
+- Antes de migrar producción, registra un marcador de D1 con `wrangler d1 time-travel info appclase`.
+- Guarda las exportaciones de D1 y las copias de R2 en almacenamiento privado cifrado, con acceso y retención controlados. Conserva las claves de objeto de R2 y un inventario con tamaño y suma SHA-256. Evita guardar copias de datos reales en GitHub Actions o en el repositorio.
+- Verifica las copias en una D1 y un bucket de ensayo independientes. Comprueba que cada metadato restaurado apunta a un archivo recuperado y conserva el mismo contenido. Restaura producción únicamente como parte de una recuperación autorizada.
+- `bash scripts/restore-drill.sh` repite en CI un ensayo con datos ficticios, el esquema de D1 en SQLite y almacenes R2 locales independientes. No usa credenciales ni datos de producción.
