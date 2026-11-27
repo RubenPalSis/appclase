@@ -1,3 +1,4 @@
+import { bucket } from './storage.ts';
 import { requireStaff } from './classes.ts';
 import { HttpError, first, list, now, run, text } from './security.ts';
 
@@ -11,11 +12,6 @@ const types = {
   xlsx: { mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', signature: [0x50,0x4b,3,4] },
   pptx: { mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', signature: [0x50,0x4b,3,4] },
 };
-
-export function bucket(env) {
-  if (!env.DOCUMENTS) throw new HttpError(503, 'La subida de documentos aún no está habilitada.');
-  return env.DOCUMENTS;
-}
 
 export const documents = (db, course) => list(db, `
   SELECT id,name,mime,bytes,created FROM documents WHERE class_id=? ORDER BY created DESC,id DESC LIMIT 100`, course.id);

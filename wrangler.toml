@@ -8,7 +8,4 @@ database_name = "appclase"
 database_id = "cc4b0417-67ed-48fd-87dd-3c83972ad343"
 migrations_dir = "migrations"
 
-# Activa el enlace solo después de autorizar y crear un bucket R2 privado.
-# [[r2_buckets]]
-# binding = "DOCUMENTS"
-# bucket_name = "appclase-documentos"
+# Configura SUPABASE_URL, SUPABASE_BUCKET y SUPABASE_STORAGE_KEY en Pages.
