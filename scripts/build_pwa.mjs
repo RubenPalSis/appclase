@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const dir = new URL('../build/web/', import.meta.url);
 const base = fileURLToPath(dir);
 const paths = (await readdir(base, { recursive: true, withFileTypes: true }))
-  .filter(entry => entry.isFile() && !entry.name.startsWith('_') &&
+  .filter(entry => entry.isFile() && !entry.name.startsWith('_') && !entry.name.startsWith('.') &&
     !['sw.js', 'flutter_service_worker.js', 'version.json'].includes(entry.name))
   .map(entry => '/' + relative(base, join(entry.parentPath, entry.name)).split(sep).map(encodeURIComponent).join('/'))
   .sort();

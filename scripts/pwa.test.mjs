@@ -42,6 +42,7 @@ test('la PWA conserva el shell sin conexión y excluye API y descargas', async (
   await pending;
   assert.ok(all.includes('/'));
   assert.ok(all.includes('/main.dart.js'));
+  assert.ok(!all.includes('/.last_build_id'));
   assert.ok(!all.some(path => path.startsWith('/api/')));
   const request = (path, mode = 'navigate') => {
     let promise;
