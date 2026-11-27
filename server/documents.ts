@@ -54,7 +54,7 @@ export async function readDocument(request, originalName, lesson = false) {
 
 export async function upload(env, course, request, originalName) {
   requireStaff(course);
-  const storage = bucket(env);
+  const storage = bucket(env, course);
   const { name, bytes, total, mime } = await readDocument(request, originalName);
   const id = crypto.randomUUID();
   const key = course.id + '/' + id;
@@ -71,11 +71,11 @@ export async function upload(env, course, request, originalName) {
 export async function download(env, course, id) {
   const file = await first(env.DB, 'SELECT * FROM documents WHERE id=? AND class_id=?', id, course.id);
   if (!file) throw new HttpError(404, 'El documento no está disponible.');
-  return downloadObject(env, course.id + '/' + file.id, file.name);
+  return downloadObject(env, course, course.id + '/' + file.id, file.name);
 }
 
-export async function downloadObject(env, key, name) {
-  const object = await bucket(env).get(key);
+export async function downloadObject(env, course, key, name) {
+  const object = await bucket(env, course).get(key);
   if (!object) throw new HttpError(404, 'El documento no está disponible.');
   return new Response(object.body, {
     headers: {
@@ -89,7 +89,7 @@ export async function downloadObject(env, key, name) {
 
 export async function attachSubmission(env, course, user, assignment, request, originalName) {
   if (course.role !== 'student' || course.archived) throw new HttpError(403, 'No puedes adjuntar archivos a esta tarea.');
-  const storage = bucket(env);
+  const storage = bucket(env, course);
   const eligible = await first(env.DB, `SELECT 1 FROM submissions s JOIN assignments a ON a.id=s.assignment_id
     WHERE a.id=? AND a.class_id=? AND s.user_id=? AND s.score IS NULL AND (a.allow_late=1 OR a.due>=?)`,
     assignment, course.id, user.id, now());
@@ -118,5 +118,5 @@ export async function downloadSubmission(env, course, user, assignment, id) {
     WHERE f.id=? AND a.id=? AND a.class_id=? AND (?<>'student' OR f.user_id=?)`,
     id, assignment, course.id, course.role, user.id);
   if (!file) throw new HttpError(404, 'El documento no está disponible.');
-  return downloadObject(env, course.id + '/submissions/' + file.id, file.name);
+  return downloadObject(env, course, course.id + '/submissions/' + file.id, file.name);
 }

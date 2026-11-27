@@ -38,6 +38,7 @@ async function fixture(t, config = {}) {
   sqlite.exec(await readFile(new URL('../migrations/0014_password_resets.sql', import.meta.url), 'utf8'));
   sqlite.exec(await readFile(new URL('../migrations/0015_scheduled_lessons.sql', import.meta.url), 'utf8'));
   sqlite.exec(await readFile(new URL('../migrations/0016_storage_quota.sql', import.meta.url), 'utf8'));
+  sqlite.exec(await readFile(new URL('../migrations/0017_teacher_storage.sql', import.meta.url), 'utf8'));
   sqlite.exec("INSERT INTO platform_administrators VALUES ('admin')");
   const sessions = new Map();
   for (const [index, user] of ['teacher','student','outside','other','admin'].entries()) {
@@ -303,9 +304,66 @@ test('Supabase privado conserva los permisos, rangos y el límite de almacenamie
   const range = await call(endpoint,'student',undefined,origin,{Range:'bytes=4-7'});
   assert.equal(range.status,206);
   assert.deepEqual(range.data,video.slice(4,8));
-  call.sqlite.prepare('INSERT INTO storage_reservations VALUES (?,?)').run('reserved',800_000_000-video.byteLength);
+  call.sqlite.prepare('INSERT INTO storage_reservations (object_key,bytes) VALUES (?,?)').run('reserved',800_000_000-video.byteLength);
   assert.equal((await call(upload,'teacher',video)).status,409);
   assert.equal(mock.mock.callCount(),2);
+});
+
+test('cada profesor usa su bucket, y los archivos conservan su conexión al cambiar de proyecto', async t => {
+  const call = await fixture(t, {
+    DOCUMENTS: undefined, STORAGE_ENCRYPTION_KEY: Buffer.alloc(32,7).toString('base64'),
+  });
+  const projects = new Map();
+  const upstream = t.mock.method(globalThis,'fetch',async (input,options) => {
+    const url = new URL(input);
+    const headers = new Headers(options.headers);
+    if (url.pathname.startsWith('/auth/')) {
+      assert.match(headers.get('apikey'),/^sb_publishable_/);
+      assert.equal(JSON.parse(options.body).password,'contraseña-técnica-de-prueba');
+      return Response.json({access_token:url.hostname,expires_in:3600});
+    }
+    if (url.pathname.startsWith('/storage/v1/object/public/')) return new Response(null,{status:404});
+    assert.equal(headers.get('Authorization'),'Bearer '+url.hostname);
+    if (url.pathname.startsWith('/storage/v1/bucket/')) return Response.json({public:false});
+    const path = url.hostname + url.pathname.replace('/storage/v1/object/authenticated/','/').replace('/storage/v1/object/','/');
+    if (options.method === 'POST') {
+      projects.set(path,options.body);
+      return Response.json({});
+    }
+    if (options.method === 'DELETE') {
+      projects.delete(path);
+      return Response.json({});
+    }
+    return projects.has(path) ? new Response(projects.get(path)) : new Response(null,{status:404});
+  });
+  const profile = '/account/storage';
+  const config = {origin:'https://profesoruno.supabase.co',bucket:'appclase-documentos',
+    api_key:'sb_publishable_prueba',email:'tecnico@example.com',password:'contraseña-técnica-de-prueba'};
+  assert.equal((await call(profile,'student',config)).status,403);
+  assert.equal((await call(profile,'teacher',{...config,origin:'https://otro.example'})).status,400);
+  assert.equal(upstream.mock.callCount(),0);
+  const connected = await call(profile,'teacher',config);
+  assert.deepEqual(connected.data,{available:true,connection:{origin:config.origin,bucket:config.bucket}});
+  const row = call.sqlite.prepare('SELECT credential FROM teacher_storage_connections').get();
+  assert.ok(!row.credential.includes(config.password));
+  assert.equal((await call(profile,'outside',config)).status,409);
+
+  const path = '/classes/course/documents';
+  const doc = new TextEncoder().encode('%PDF-1.7');
+  assert.equal((await call('/classes/course','student')).data.documents_enabled,true);
+  const first = await call(path+'?name=primero.pdf','teacher',doc);
+  assert.equal(first.status,200);
+  const old = path+'/'+first.data.id;
+  assert.equal((await call(old,'outside')).status,404);
+
+  await call(profile,'teacher',{...config,origin:'https://profesordos.supabase.co'});
+  const next = await call(path+'?name=segundo.pdf','teacher',doc);
+  assert.equal(next.status,200);
+  assert.deepEqual((await call(old,'student')).data,doc);
+  assert.deepEqual((await call(path+'/'+next.data.id,'student')).data,doc);
+  assert.ok(projects.has('profesoruno.supabase.co/appclase-documentos/course/'+first.data.id));
+  assert.ok(projects.has('profesordos.supabase.co/appclase-documentos/course/'+next.data.id));
+  assert.equal(call.sqlite.prepare('SELECT COUNT(DISTINCT connection_id) AS total FROM storage_reservations').get().total,2);
 });
 
 test('gestión de usuarios, revocación sin reingreso y auditoría por centro', async t => {
