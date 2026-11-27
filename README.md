@@ -8,7 +8,7 @@ La aplicación ya tiene acceso por correo y contraseña, alta de cuentas, activa
 
 La API valida permisos en el servidor; ocultar una opción en la interfaz no concede ni revoca acceso. Las rutas y tablas existentes de D1 se conservan durante esta migración.
 
-El producto aún requiere trabajo antes de comercializarlo con centros reales: completar controles operativos de calificación y asistencia, formularios de examen y entrega, verificación y recuperación de correo, política/retención de datos, pruebas de accesibilidad y revisión de privacidad aplicable a cada centro. Los archivos de materiales requieren configurar un bucket R2 privado; el binding no está activado en este repositorio. No se deben cargar datos reales de menores hasta completar las revisiones del centro y de privacidad.
+El producto aún requiere trabajo antes de comercializarlo con centros reales: activar y probar los servicios de correo y documentos en producción, definir la retención de datos y completar las pruebas de accesibilidad y la revisión de privacidad aplicable a cada centro. Los archivos de materiales requieren configurar un bucket R2 privado; el binding no está activado en este repositorio. No se deben cargar datos reales de menores hasta completar las revisiones del centro y de privacidad.
 
 ## Arquitectura
 
@@ -103,3 +103,21 @@ Pages, Workers y D1 pueden servir un piloto dentro de las cuotas gratuitas vigen
 - El primer acceso docente falla: verifica correo, contraseña temporal, código del centro y asociación activa.
 - Una publicación no aparece tras desplegar: actualiza el service worker cerrando pestañas APPCLASE antiguas y vuelve a abrir la web.
 - Error de esquema D1: aplica las migraciones al mismo binding que está configurado en el proyecto Pages.
+
+### Correo de cuenta
+
+La recuperación de contraseña aparece cuando el entorno de Pages tiene
+`APP_ORIGIN` con el origen público de APPCLASE, `ACCOUNT_EMAIL_FROM` con
+el remitente verificado y `RESEND_API_KEY` como secreto. Estos valores
+son de ejecución y deben configurarse en el entorno de Cloudflare. Prueba
+el flujo con cuentas de prueba antes de habilitarlos para el alumnado.
+Los enlaces caducan a los 30 minutos y se consumen una sola vez.
+
+En el aula, `Videoclases y PDF` admite PDF de hasta 16 MB y vídeos MP4 o WebM de hasta 48 MB con el bucket `DOCUMENTS` activo. Los vídeos se sirven con peticiones por rangos. El profesorado puede mostrar las videoclases, PDF y exámenes en Agenda con un candado u ocultarlos hasta la apertura. La API aplica estas reglas también a las descargas directas. La pestaña Mensajes conecta de forma privada al profesor responsable con cada alumno de la clase.
+
+### Copias y recuperación
+
+- Antes de migrar producción, registra un marcador de D1 con `wrangler d1 time-travel info appclase`.
+- Guarda las exportaciones de D1 y las copias de R2 en almacenamiento privado cifrado, con acceso y retención controlados. Conserva las claves de objeto de R2 y un inventario con tamaño y suma SHA-256. Evita guardar copias de datos reales en GitHub Actions o en el repositorio.
+- Verifica las copias en una D1 y un bucket de ensayo independientes. Comprueba que cada metadato restaurado apunta a un archivo recuperado y conserva el mismo contenido. Restaura producción únicamente como parte de una recuperación autorizada.
+- `bash scripts/restore-drill.sh` repite en CI un ensayo con datos ficticios, el esquema de D1 en SQLite y almacenes R2 locales independientes. No usa credenciales ni datos de producción.

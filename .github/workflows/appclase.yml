@@ -18,6 +18,7 @@ jobs:
       - run: npm run build
       - run: npm test
       - run: bash scripts/cloudflare-smoke.sh
+      - run: bash scripts/restore-drill.sh
       - uses: actions/upload-artifact@v4
         with:
           name: appclase-web

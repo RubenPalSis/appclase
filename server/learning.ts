@@ -11,19 +11,21 @@ export const assignments = (db, course, user) => list(db, `
   FROM assignments a LEFT JOIN submissions s ON s.assignment_id=a.id AND s.user_id=?
   WHERE a.class_id=? ORDER BY a.due,a.id LIMIT 100`, course.role, course.org_id, user.id, course.id);
 
-export async function assignmentDetail(db, course, user, id) {
+export async function assignmentDetail(db, course, user, id, documentsEnabled) {
   const task = await first(db, `
-    SELECT a.*,s.submitted,s.body AS answer,s.score,s.feedback
+    SELECT a.*,s.submitted,s.body AS answer,s.score,s.feedback,f.id AS attachment_id,f.name AS attachment_name
     FROM assignments a LEFT JOIN submissions s ON s.assignment_id=a.id AND s.user_id=?
+    LEFT JOIN submission_attachments f ON f.assignment_id=s.assignment_id AND f.user_id=s.user_id
     WHERE a.class_id=? AND a.id=?`, user.id, course.id, id);
   if (!task) throw new HttpError(404, 'No se encuentra la tarea.');
-  const detail = { task, role: course.role, archived: course.archived };
+  const detail = { task, role: course.role, archived: course.archived, documents_enabled: documentsEnabled };
   if (course.role === 'student') return detail;
   const roster = await list(db, `
-    SELECT u.id AS user_id,u.name,s.body,s.submitted,s.score,s.feedback
+    SELECT u.id AS user_id,u.name,s.body,s.submitted,s.score,s.feedback,f.id AS attachment_id,f.name AS attachment_name
     FROM class_students cs JOIN users u ON u.id=cs.user_id
     JOIN memberships m ON m.org_id=? AND m.user_id=u.id AND m.role='student' AND m.active=1
     LEFT JOIN submissions s ON s.assignment_id=? AND s.user_id=u.id
+    LEFT JOIN submission_attachments f ON f.assignment_id=s.assignment_id AND f.user_id=s.user_id
     WHERE cs.class_id=? ORDER BY u.name,u.id`, course.org_id, id, course.id);
   return { ...detail, roster };
 }

@@ -6,12 +6,15 @@ type Work = {
   submitted: number | null;
   score: number | null;
   feedback: string | null;
+  attachment_id: string | null;
+  attachment_name: string | null;
 };
 
 type Submission = Work & { user_id: string; name: string; body: string | null };
 type Detail = {
   role: string;
   archived: number;
+  documents_enabled: boolean;
   task: Work & { title: string; body: string; due: number; points: number; allow_late: number; answer: string | null };
   roster?: Submission[];
 };
@@ -66,6 +69,28 @@ function AssignmentDetail({ endpoint, classId }: { endpoint: string; classId: st
     }
   }
 
+  async function attach(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const file = new FormData(form).get('attachment');
+    if (!(file instanceof File) || !file.size || busy) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      if (file.size > 16 * 1024 * 1024) throw Error('El documento supera los 16 MB.');
+      const response = await fetch('/api' + endpoint + '/attachment?name=' + encodeURIComponent(file.name), {
+        method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: file,
+      });
+      if (!response.ok) throw Error((await response.json()).error);
+      await load();
+      setNotice('Archivo adjuntado.');
+    } catch (reason) { setError((reason as Error).message); }
+    finally { setBusy(false); }
+  }
+
+  const attachmentLink = (work: Work) => work.attachment_id && <a className="button soft mt-3"
+    href={'/api' + endpoint + '/attachment/' + work.attachment_id} download>{work.attachment_name}</a>;
   const back = <Link className="back-link" to={`/clases/${classId}`}>Volver a la clase</Link>;
   if (!detail) return <div className="content-wrap">{back}
     {error ? <p className="error-box" role="alert">{error}</p> : <p role="status">Cargando tarea…</p>}
@@ -91,6 +116,13 @@ function AssignmentDetail({ endpoint, classId }: { endpoint: string; classId: st
         <label className="field"><span>Respuesta</span><textarea name="answer" rows={5} required maxLength={10000} defaultValue={task.answer ?? ''}/></label>
         <button className="button primary" disabled={busy}>{task.submitted ? 'Actualizar entrega' : 'Enviar tarea'}</button>
       </form> : task.answer && <p className="mt-4 whitespace-pre-wrap break-words">{task.answer}</p>}
+      {attachmentLink(task)}
+      {detail.documents_enabled && canDeliver && task.submitted && !task.attachment_id && <form className="form-stack mt-4" onSubmit={event => void attach(event)}>
+        <label className="field"><span>Adjuntar un archivo a la entrega · hasta 16 MB</span>
+          <input type="file" name="attachment" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx,.pptx" required/>
+        </label>
+        <button className="button soft" disabled={busy}>Adjuntar archivo</button>
+      </form>}
       {!canDeliver && task.score === null && <p className="muted mt-3">Las entregas están cerradas.</p>}
     </section> : <section className="panel">
       <h2>Entregas del grupo</h2>
@@ -99,6 +131,7 @@ function AssignmentDetail({ endpoint, classId }: { endpoint: string; classId: st
       {roster.map(work => <article className="mt-4 border-t border-line pt-4" key={work.user_id}>
         <h3>{work.name} · {status(work)}</h3>
         {work.body && <p className="mt-2 whitespace-pre-wrap break-words">{work.body}</p>}
+        {attachmentLink(work)}
         {work.submitted !== null && !detail.archived && <form className="form-stack mt-3" onSubmit={event => void save(event, work)}>
           <label className="field"><span>Nota sobre {task.points}</span><input className="ui-input" name="score" type="number" required min={0} max={task.points} defaultValue={work.score ?? ''}/></label>
           <label className="field"><span>Comentarios de la corrección</span><textarea name="feedback" rows={2} maxLength={4000} defaultValue={work.feedback ?? ''}/></label>

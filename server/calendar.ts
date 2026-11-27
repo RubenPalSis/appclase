@@ -14,15 +14,19 @@ export function events(db, course, url) {
   const start = integer(Number(url.searchParams.get('from')), 0, 4102444800);
   const end = integer(Number(url.searchParams.get('until')), start + 1, Math.min(start + 32 * 86400, 4102444800));
   return list(db, `SELECT * FROM (
-      SELECT id,title,body,start,finish,created,'event' AS kind FROM events
+      SELECT id,title,body,start,finish,created,'event' AS kind,0 AS locked FROM events
         WHERE class_id=?1 AND start<?3 AND finish>=?2
       UNION ALL
-      SELECT id,title,'' AS body,due AS start,due+60 AS finish,due AS created,'assignment'
+      SELECT id,title,'' AS body,due AS start,due+60 AS finish,due AS created,'assignment',0
         FROM assignments WHERE class_id=?1 AND due>=?2 AND due<?3
       UNION ALL
-      SELECT id,title,'' AS body,opens AS start,closes AS finish,opens AS created,'exam'
-        FROM exams WHERE class_id=?1 AND opens<?3 AND closes>=?2
-    ) ORDER BY start,id LIMIT 150`, course.id, start, end);
+      SELECT e.id,e.title,'',e.opens,e.closes,e.opens,'exam',e.opens>?4
+        FROM exams e LEFT JOIN hidden_exams h ON h.exam_id=e.id
+        WHERE e.class_id=?1 AND e.opens<?3 AND e.closes>=?2 AND (?5=1 OR h.exam_id IS NULL OR e.opens<=?4)
+      UNION ALL
+      SELECT id,title,'',opens,opens+60,opens,'lesson',opens>?4
+        FROM lessons WHERE class_id=?1 AND opens>=?2 AND opens<?3 AND (?5=1 OR hidden_until_open=0 OR opens<=?4)
+    ) ORDER BY start,id LIMIT 150`, course.id, start, end, now(), Number(course.role !== 'student'));
 }
 
 const utc = seconds => new Date(seconds * 1000).toISOString().replaceAll('-', '').replaceAll(':', '').replace('.000', '');

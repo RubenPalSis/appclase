@@ -110,3 +110,26 @@ export async function archive(db, course, user, data) {
   ]);
   return {};
 }
+
+export async function importStudents(db, course, user, data) {
+  requireStaff(course);
+  if (!Array.isArray(data.emails) || !data.emails.length || data.emails.length > 50) {
+    throw new HttpError(400, 'El CSV debe incluir entre 1 y 50 correos.');
+  }
+  const emails = [...new Set<string>(data.emails.map(value => text(value, 254).toLowerCase()))];
+  if (emails.some(value => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))) {
+    throw new HttpError(400, 'Revisa los correos del CSV.');
+  }
+  const results = await db.batch([...emails.map(email => statement(db, `
+    INSERT INTO class_students (class_id,user_id)
+    SELECT c.id,u.id FROM users u
+    JOIN memberships m ON m.user_id=u.id AND m.role='student' AND m.active=1
+    JOIN classes c ON c.org_id=m.org_id AND c.id=? AND c.archived=0
+    WHERE u.email=?
+    ON CONFLICT(class_id,user_id) DO UPDATE SET user_id=excluded.user_id`, course.id, email)),
+  audit(db, course.org_id, user.id, 'class.students.imported', course.id)]);
+  return {
+    processed: emails.length,
+    unavailable: emails.filter((_, index) => !results[index].meta.changes),
+  };
+}

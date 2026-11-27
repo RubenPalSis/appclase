@@ -31,7 +31,8 @@ type CalendarEvent = {
   body: string;
   start: number;
   finish: number;
-  kind: 'assignment' | 'exam' | 'event';
+  kind: 'assignment' | 'exam' | 'event' | 'lesson';
+  locked: number;
 };
 
 export function AgendaCalendar({ renderRows }: { renderRows: (rows: Row[]) => ReactNode }) {
@@ -58,7 +59,7 @@ export function AgendaCalendar({ renderRows }: { renderRows: (rows: Row[]) => Re
     if (!coursesLoaded) return;
     let active = true;
     const query = calendarQuery(month);
-    Promise.allSettled(courses.map(async course => {
+    const reload = () => Promise.allSettled(courses.map(async course => {
       const events = await api.get<CalendarEvent[]>(`/classes/${course.id}/calendar${query}`);
       return events.map(event => ({
         ...event, id: `${course.id}:${event.kind}:${event.id}`, type: event.kind, assignmentId: event.id, date: event.start,
@@ -72,12 +73,15 @@ export function AgendaCalendar({ renderRows }: { renderRows: (rows: Row[]) => Re
         error: results.some(item => item.status === 'rejected') ? 'No se pudieron cargar todas las clases.' : '',
       });
     });
-    return () => { active = false; };
+    void reload();
+    const refresh = window.setInterval(() => { if (!document.hidden) void reload(); }, 60000);
+    return () => { active = false; window.clearInterval(refresh); };
   }, [courses, coursesLoaded, month]);
 
   const rows = result?.month === month ? result.rows.filter(row => !excluded.has(row.class_id) && (kind === 'all' || row.kind === kind)) : [];
   const dayCount = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
   const leadingDays = (month.getDay() + 6) % 7;
+  const trailingDays = (7 - (leadingDays + dayCount) % 7) % 7;
   const days = Array.from({ length: dayCount }, (_, i) => {
     const date = new Date(month.getFullYear(), month.getMonth(), i + 1);
     const next = new Date(month.getFullYear(), month.getMonth(), i + 2);
@@ -112,7 +116,9 @@ export function AgendaCalendar({ renderRows }: { renderRows: (rows: Row[]) => Re
         </div>
         <div className="mini-calendar">
           {weekdays.map(label => <span className="day-label" key={label}>{label}</span>)}
-          {Array.from({ length: leadingDays }, (_, i) => <span key={i} aria-hidden="true"/>)}
+          {Array.from({ length: leadingDays }, (_, i) => <span className="mini-day mini-day-outside" key={'prev-' + i} aria-hidden="true">
+            {new Date(month.getFullYear(), month.getMonth(), i - leadingDays + 1).getDate()}
+          </span>)}
           {days.map(({ date, subjects }) => {
             const number = date.getDate();
             const label = dayLabel.format(date);
@@ -132,6 +138,7 @@ export function AgendaCalendar({ renderRows }: { renderRows: (rows: Row[]) => Re
               </button>
             );
           })}
+          {Array.from({ length: trailingDays }, (_, i) => <span className="mini-day mini-day-outside" key={'next-' + i} aria-hidden="true">{i + 1}</span>)}
         </div>
         <label className="field mt-4">
           <span>Tipo de actividad</span>
@@ -140,6 +147,7 @@ export function AgendaCalendar({ renderRows }: { renderRows: (rows: Row[]) => Re
             <option value="assignment">Tareas</option>
             <option value="exam">Exámenes</option>
             <option value="event">Eventos</option>
+            <option value="lesson">Videoclases y PDF</option>
           </select>
         </label>
         {courses.length > 0 && <div className="agenda-filter">
