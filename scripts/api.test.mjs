@@ -15,6 +15,7 @@ async function fixture(t) {
   sqlite.exec(await readFile(new URL("../migrations/0002_exams.sql", import.meta.url), "utf8"));
   sqlite.exec(await readFile(new URL('../migrations/0003_membership_status.sql', import.meta.url), 'utf8'));
   sqlite.exec(await readFile(new URL('../migrations/0004_documents.sql', import.meta.url), 'utf8'));
+  sqlite.exec(await readFile(new URL('../migrations/0005_calendar.sql', import.meta.url), 'utf8'));
   sqlite.exec(`
     INSERT INTO users VALUES ('teacher','t@example.com','Profe'),('student','s@example.com','Alumna'),
       ('outside','x@example.com','Externo'),('other','o@example.com','Otro alumno'),('admin','a@example.com','Admin');
@@ -79,7 +80,7 @@ async function fixture(t) {
       }),
       env,
     });
-    return { status: result.status, data: result.status === 204 ? null : result.headers.has('content-disposition') ? new Uint8Array(await result.arrayBuffer()) : await result.json() };
+    return { status: result.status, data: result.status === 204 ? null : result.headers.get('content-type')?.startsWith('text/') ? await result.text() : result.headers.has('content-disposition') ? new Uint8Array(await result.arrayBuffer()) : await result.json() };
   };
 }
 
@@ -185,4 +186,33 @@ test('documentos privados, validación de formato y autorización de subida', as
   assert.equal((await call(route+'/'+id,'outside')).status, 404);
   assert.equal((await call(route,'student')).data[0].name, 'temario.pdf');
   assert.deepEqual((await call(route+'/'+id,'student')).data, pdf);
+});
+
+test('calendario acotado, exportación ICS y protección contra saltos de línea', async t => {
+  const call = await fixture(t);
+  const route = '/classes/course/calendar';
+  const time = now();
+  const event = {title:'Tutoría, 1º\nEND:VEVENT',body:'Consulta',start:time+60,finish:time+120};
+  assert.equal((await call(route,'student',event)).status, 403);
+  assert.equal((await call(route,'teacher',event)).status, 200);
+  const query = '?from='+time+'&until='+(time+180);
+  assert.equal((await call(route+query,'outsider')).status, 401);
+  assert.equal((await call(route+query,'outside')).status, 404);
+  assert.equal((await call(route+query,'student')).data[0].title, event.title);
+  const {data: ics} = await call(route+'/export'+query,'student');
+  assert.ok(ics.includes('SUMMARY:Tutoría\\, 1º\\nEND:VEVENT'));
+  assert.equal(ics.split('\r\n').filter(line => line === 'END:VEVENT').length,1);
+});
+
+test('calificaciones privadas y exportación CSV con campos neutralizados', async t => {
+  const call = await fixture(t);
+  const route = '/classes/course';
+  await call(route+'/assignments','teacher',{title:'=1+1',body:'Texto',due:now()+60,points:10,allow_late:false});
+  const [{id}] = (await call(route+'/assignments','student')).data;
+  await call(route+'/assignments/'+id+'/deliver','student',{body:'Respuesta'});
+  await call(route+'/assignments/'+id+'/reviews','teacher',{user_id:'student',score:6,feedback:'Revisado'});
+  assert.equal((await call(route+'/grades','student')).data[0].score, 6);
+  assert.deepEqual((await call(route+'/grades','other')).data, []);
+  assert.equal((await call(route+'/grades/export','student')).status, 403);
+  assert.ok((await call(route+'/grades/export','teacher')).data.includes("\"'=1+1\""));
 });

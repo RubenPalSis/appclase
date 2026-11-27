@@ -1,3 +1,5 @@
+import * as calendar from '../../server/calendar.js';
+import * as grades from '../../server/grades.js';
 import * as files from '../../server/documents.js';
 import * as administration from '../../server/administration.js';
 import { currentUser, logout, oauth } from '../../server/auth.js';
@@ -65,8 +67,14 @@ export async function onRequest({ request, env }) {
       if (method === 'POST' && action === 'start') return response(await exams.startExam(db, course, user, id));
       if (method === 'POST') return response(await exams.saveExam(db, course, user, id, action, await jsonBody(request)));
     }
+    if (parts.length === 4 && method === 'GET' && parts[3] === 'export') {
+      if (section === 'calendar') return await calendar.downloadCalendar(db, course, url);
+      if (section === 'grades') return await grades.exportGrades(db, course);
+    }
     if (parts.length === 3 && method === 'GET') {
       switch (section) {
+        case 'calendar': return response(await calendar.events(db, course, url));
+        case 'grades': return response(await grades.gradeRows(db, course, user));
         case 'posts': return response(await list(db, `SELECT p.*,u.name AS author FROM posts p
           JOIN users u ON u.id=p.author_id WHERE p.class_id=? ORDER BY p.created DESC,p.id DESC LIMIT 100`, course.id));
         case 'materials': return response(await list(db, 'SELECT * FROM materials WHERE class_id=? ORDER BY created DESC,id DESC LIMIT 100', course.id));
@@ -79,6 +87,7 @@ export async function onRequest({ request, env }) {
     if (parts.length === 3 && method === 'POST') {
       const data = await jsonBody(request);
       switch (section) {
+        case 'calendar': return response(await calendar.addEvent(db, course, data));
         case 'posts': return response(await classes.createPost(db, course, user, data));
         case 'materials': return response(await classes.createMaterial(db, course, data));
         case 'exams': return response(await exams.createExam(db, course, data));

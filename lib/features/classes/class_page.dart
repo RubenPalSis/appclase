@@ -7,6 +7,7 @@ import 'package:web/web.dart' as web;
 import '../../core/api.dart';
 import '../../core/widgets.dart';
 import '../../main.dart' show ThemeButton;
+import 'calendar_page.dart';
 import 'coursework.dart';
 import 'documents_page.dart';
 import 'exams.dart';
@@ -18,6 +19,8 @@ enum ClassSection {
   exams('Exámenes', Icons.quiz_outlined),
   students('Alumnos', Icons.people_outline),
   documents('Archivos', Icons.description_outlined),
+  calendar('Calendario', Icons.calendar_month_outlined),
+  grades('Calificaciones', Icons.grade_outlined),
   attendance('Asistencia', Icons.event_available_outlined);
 
   const ClassSection(this.label, this.icon);
@@ -176,6 +179,14 @@ class _ClassPageState extends ConsumerState<ClassPage> {
               path: '$path/documents',
               canUpload: writable,
             ),
+            ClassSection.calendar => CalendarPage(
+              path: '$path/calendar',
+              writable: writable,
+            ),
+            ClassSection.grades => GradesPage(
+              path: '$path/grades',
+              staff: staff,
+            ),
             ClassSection.attendance => AttendancePage(
               path: path,
               staff: staff,
@@ -232,6 +243,7 @@ class _ClassPageState extends ConsumerState<ClassPage> {
                 ? Row(
                     children: [
                       NavigationRail(
+                        scrollable: true,
                         extended: !collapsed,
                         labelType: collapsed
                             ? NavigationRailLabelType.selected

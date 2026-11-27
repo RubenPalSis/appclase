@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:web/web.dart' as web;
 
 import '../../core/api.dart';
+import '../../core/download.dart';
 import '../../core/widgets.dart';
 import 'coursework.dart';
 
@@ -79,11 +80,7 @@ class _DocumentsPageState extends ConsumerState<DocumentsPage> {
             trailing: IconButton(
               tooltip: 'Descargar ${file['name']}',
               icon: const Icon(Icons.download_outlined),
-              onPressed: () {
-                final link = web.HTMLAnchorElement()
-                  ..href = '/api${widget.path}/${file['id']}';
-                link.click();
-              },
+              onPressed: () => downloadFromApi('${widget.path}/${file['id']}'),
             ),
           ),
         ),
